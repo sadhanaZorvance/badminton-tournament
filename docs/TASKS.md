@@ -12,7 +12,7 @@
 02 | COMPLETE | 2026-04-30 14:24 | Supabase Schema + Seed Data
 03 | COMPLETE | 2026-04-30 14:28 | Bracket Wiring Config
 04 | COMPLETE | 2026-04-30 14:32 | Auth System
-05 | PENDING | | Global UI Shell + Design System
+05 | COMPLETE | 2026-04-30 14:36 | Global UI Shell + Design System
 
 ## PHASE B — CORE MATCH ENGINE
 06 | PENDING | | Match Picker Screen

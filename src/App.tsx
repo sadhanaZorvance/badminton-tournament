@@ -1,5 +1,6 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import LoginScreen from './screens/Login/LoginScreen';
+import MatchPickerScreen from './screens/MatchPicker/MatchPickerScreen';
 import ProtectedRoute from './components/ProtectedRoute';
 import AdminHeader from './components/AdminHeader';
 import { getCourtAdminSlug, getTopAdminSlug } from './lib/auth';
@@ -81,7 +82,7 @@ export default function App() {
           path={`${courtBase}/picker`}
           element={
             <ProtectedRoute role="court_admin" loginPath={courtBase}>
-              <AdminPlaceholder basePath={courtBase} loginPath={courtBase} title="Match Picker" />
+              <MatchPickerScreen basePath={courtBase} loginPath={courtBase} />
             </ProtectedRoute>
           }
         />
@@ -102,7 +103,7 @@ export default function App() {
           path={`${topBase}/picker`}
           element={
             <ProtectedRoute role="top_admin" loginPath={topBase}>
-              <AdminPlaceholder basePath={topBase} loginPath={topBase} title="Match Picker" />
+              <MatchPickerScreen basePath={topBase} loginPath={topBase} />
             </ProtectedRoute>
           }
         />
