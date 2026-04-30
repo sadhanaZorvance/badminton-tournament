@@ -1,0 +1,40 @@
+# TASKS.md — Leo Rising Stars Kids Tournament App
+# Build tracker for run_prompts.ps1
+# Status values: PENDING | COMPLETE | FAILED
+# DO NOT manually edit status — managed by run_prompts.ps1
+
+## FORMAT
+# Each line: PROMPT_ID | STATUS | TIMESTAMP | NOTES
+# Script reads first PENDING line, runs it, updates to COMPLETE or FAILED
+
+## PHASE A — FOUNDATION
+01 | PENDING | | Project Scaffold + Environment
+02 | PENDING | | Supabase Schema + Seed Data
+03 | PENDING | | Bracket Wiring Config
+04 | PENDING | | Auth System
+05 | PENDING | | Global UI Shell + Design System
+
+## PHASE B — CORE MATCH ENGINE
+06 | PENDING | | Match Picker Screen
+07 | PENDING | | Score Entry Single Set
+08 | PENDING | | Score Entry Best of 3
+09 | PENDING | | Match Completion + Auto-Progression
+10 | PENDING | | Walkover and Retirement
+
+## PHASE C — HARD EVENTS + TRIGGERS
+11 | PENDING | | E7 Handicap
+12 | PENDING | | Round Robin Standings Engine
+13 | PENDING | | E1 BLP Trigger
+14 | PENDING | | E1 Consolation Pool Generation
+15 | PENDING | | E8 Draw Form + Lock
+16 | PENDING | | Demo Mode + Reset
+
+## PHASE D — ADMIN POWER FEATURES
+17 | PENDING | | Top Admin Cascade Edit
+18 | PENDING | | Event Control Screen + Audit Log
+19 | PENDING | | Champion Board Admin + Podium
+
+## PHASE E — PUBLIC SITE
+20 | PENDING | | Public Site Shell + Now Playing
+21 | PENDING | | Brackets + Standings Tabs
+22 | PENDING | | Champion Board + Realtime

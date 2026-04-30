@@ -1,0 +1,93 @@
+# ============================================================
+# Leo Rising Stars Tournament App — .gitignore
+# Stack: React + TypeScript + Vite + Supabase + Vercel
+# ============================================================
+
+# ── Pipeline documents (sensitive IP) ───────────────────────
+CLAUDE.md
+docs/CLAUDE.md
+docs/PROMPTS.md
+PROMPTS.md
+
+# ── Dependencies ────────────────────────────────────────────
+node_modules/
+.pnp
+.pnp.js
+
+# ── Build output ────────────────────────────────────────────
+dist/
+dist-ssr/
+build/
+out/
+
+# ── Environment variables ────────────────────────────────────
+.env
+.env.local
+.env.development
+.env.development.local
+.env.staging
+.env.staging.local
+.env.production
+.env.production.local
+# Keep .env.example committed — it documents required vars
+!.env.example
+
+# ── Vite ────────────────────────────────────────────────────
+vite.config.ts.timestamp-*
+
+# ── TypeScript ──────────────────────────────────────────────
+*.tsbuildinfo
+
+# ── Logs ────────────────────────────────────────────────────
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ── Supabase ────────────────────────────────────────────────
+supabase/.branches/
+supabase/.temp/
+# Keep supabase/config.toml and migrations committed
+!supabase/config.toml
+!supabase/migrations/
+
+# ── Vercel ──────────────────────────────────────────────────
+.vercel/
+
+# ── OS generated ────────────────────────────────────────────
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# ── Editor / IDE ────────────────────────────────────────────
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+*.swp
+
+# ── Testing ─────────────────────────────────────────────────
+coverage/
+.nyc_output/
+
+# ── Package manager locks (keep one, ignore others) ─────────
+# Keeping package-lock.json — remove this line if using yarn or pnpm
+yarn.lock
+pnpm-lock.yaml
+
+# ── Temp files (batch runner) ────────────────────────────────
+tmp/
+temp/
+$env:TEMP/leo_prompts/
+
+run_prompts.ps1

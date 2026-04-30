@@ -1,0 +1,95 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+<!-- Navy background circle -->
+<circle cx="256" cy="256" r="256" fill="#0E1B2E"/>
+
+<!-- Outer gold ring -->
+<circle cx="256" cy="256" r="248" fill="none" stroke="#C9A84C" stroke-width="6"/>
+<!-- Inner gold ring -->
+<circle cx="256" cy="256" r="228" fill="none" stroke="#C9A84C" stroke-width="2.5"/>
+
+<!-- Crown base -->
+<rect x="192" y="120" width="128" height="18" rx="3" fill="#C9A84C"/>
+
+<!-- Crown points -->
+<polygon points="192,120 206,88 220,120" fill="#F0C040"/>
+<polygon points="244,120 256,76 268,120" fill="#F0C040"/>
+<polygon points="292,120 306,88 320,120" fill="#F0C040"/>
+
+<!-- Crown orbs -->
+<circle cx="206" cy="85" r="9" fill="#F0C040"/>
+<circle cx="256" cy="72" r="11" fill="#F0C040"/>
+<circle cx="306" cy="85" r="9" fill="#F0C040"/>
+<circle cx="206" cy="85" r="4.5" fill="#0E1B2E"/>
+<circle cx="256" cy="72" r="5.5" fill="#0E1B2E"/>
+<circle cx="306" cy="85" r="4.5" fill="#0E1B2E"/>
+
+<!-- Mane outer -->
+<ellipse cx="256" cy="288" rx="120" ry="128" fill="#8B6914"/>
+<ellipse cx="160" cy="240" rx="44" ry="32" fill="#8B6914" transform="rotate(-30,160,240)"/>
+<ellipse cx="352" cy="240" rx="44" ry="32" fill="#8B6914" transform="rotate(30,352,240)"/>
+<ellipse cx="148" cy="292" rx="34" ry="44" fill="#8B6914"/>
+<ellipse cx="364" cy="292" rx="34" ry="44" fill="#8B6914"/>
+<ellipse cx="172" cy="348" rx="40" ry="30" fill="#8B6914" transform="rotate(20,172,348)"/>
+<ellipse cx="340" cy="348" rx="40" ry="30" fill="#8B6914" transform="rotate(-20,340,348)"/>
+
+<!-- Mane inner -->
+<ellipse cx="256" cy="284" rx="96" ry="104" fill="#C9A84C"/>
+<ellipse cx="176" cy="248" rx="34" ry="24" fill="#C9A84C" transform="rotate(-25,176,248)"/>
+<ellipse cx="336" cy="248" rx="34" ry="24" fill="#C9A84C" transform="rotate(25,336,248)"/>
+<ellipse cx="164" cy="290" rx="26" ry="36" fill="#C9A84C"/>
+<ellipse cx="348" cy="290" rx="26" ry="36" fill="#C9A84C"/>
+
+<!-- Face -->
+<ellipse cx="256" cy="274" rx="78" ry="86" fill="#F0C040"/>
+<ellipse cx="256" cy="224" rx="58" ry="38" fill="#C9A84C"/>
+
+<!-- Ears -->
+<ellipse cx="194" cy="202" rx="24" ry="27" fill="#C9A84C"/>
+<ellipse cx="318" cy="202" rx="24" ry="27" fill="#C9A84C"/>
+<ellipse cx="194" cy="202" rx="14" ry="17" fill="#F0C040"/>
+<ellipse cx="318" cy="202" rx="14" ry="17" fill="#F0C040"/>
+
+<!-- Eyes -->
+<ellipse cx="228" cy="258" rx="17" ry="14" fill="#0E1B2E"/>
+<ellipse cx="284" cy="258" rx="17" ry="14" fill="#0E1B2E"/>
+<ellipse cx="228" cy="258" rx="10" ry="9" fill="#1a2a10"/>
+<ellipse cx="284" cy="258" rx="10" ry="9" fill="#1a2a10"/>
+<circle cx="233" cy="254" r="3.5" fill="#F0C040" opacity="0.8"/>
+<circle cx="289" cy="254" r="3.5" fill="#F0C040" opacity="0.8"/>
+
+<!-- Brows -->
+<path d="M213 244 Q228 235 243 244" fill="none" stroke="#8B6914" stroke-width="3.5" stroke-linecap="round"/>
+<path d="M269 244 Q284 235 299 244" fill="none" stroke="#8B6914" stroke-width="3.5" stroke-linecap="round"/>
+
+<!-- Nose -->
+<ellipse cx="256" cy="284" rx="19" ry="12" fill="#C9A84C"/>
+<ellipse cx="256" cy="282" rx="12" ry="8" fill="#8B6914"/>
+<ellipse cx="248" cy="285" rx="4" ry="3.5" fill="#5a3a00"/>
+<ellipse cx="264" cy="285" rx="4" ry="3.5" fill="#5a3a00"/>
+
+<!-- Muzzle -->
+<ellipse cx="256" cy="308" rx="36" ry="24" fill="#F0C040"/>
+
+<!-- Mouth -->
+<path d="M238 302 Q256 320 274 302" fill="none" stroke="#8B6914" stroke-width="2.5" stroke-linecap="round"/>
+<line x1="256" y1="295" x2="256" y2="304" stroke="#8B6914" stroke-width="2.2"/>
+
+<!-- Whisker dots -->
+<circle cx="222" cy="306" r="3.5" fill="#8B6914"/>
+<circle cx="212" cy="312" r="3" fill="#8B6914"/>
+<circle cx="220" cy="318" r="2.5" fill="#8B6914"/>
+<circle cx="290" cy="306" r="3.5" fill="#8B6914"/>
+<circle cx="300" cy="312" r="3" fill="#8B6914"/>
+<circle cx="292" cy="318" r="2.5" fill="#8B6914"/>
+
+<!-- Chin -->
+<ellipse cx="256" cy="335" rx="26" ry="15" fill="#C9A84C"/>
+
+<!-- Banner -->
+<path d="M100 396 Q116 378 256 386 Q396 378 412 396 Q396 420 374 413 Q326 432 256 426 Q186 432 138 413 Q116 420 100 396Z" fill="#C9A84C"/>
+<path d="M100 396 Q80 396 70 410 Q86 420 100 396Z" fill="#8B6914"/>
+<path d="M412 396 Q432 396 442 410 Q426 420 412 396Z" fill="#8B6914"/>
+
+<!-- Banner text -->
+<text x="256" y="416" font-family="Georgia,serif" font-size="22" font-weight="700" fill="#0E1B2E" text-anchor="middle" letter-spacing="3">LEO · BC</text>
+</svg>
