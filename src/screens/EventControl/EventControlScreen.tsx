@@ -6,6 +6,8 @@ import { supabase } from '../../lib/supabase';
 import type { Event } from '../../types';
 import BLPTriggerPanel from './BLPTriggerPanel';
 import ConsolationPoolTriggerPanel from './ConsolationPoolTriggerPanel';
+import E8DrawForm from './E8DrawForm';
+import E8DrawPanel from './E8DrawPanel';
 
 interface EventControlScreenProps {
   basePath: string;
@@ -21,6 +23,7 @@ export default function EventControlScreen({
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
+  const [drawFormOpen, setDrawFormOpen] = useState(false);
 
   const load = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
@@ -105,6 +108,12 @@ export default function EventControlScreen({
                     <BLPTriggerPanel eventId={selectedEvent.id} />
                     <ConsolationPoolTriggerPanel eventId={selectedEvent.id} />
                   </div>
+                ) : selectedEvent.code === 'E8' ? (
+                  <E8DrawPanel
+                    eventId={selectedEvent.id}
+                    drawLocked={selectedEvent.draw_locked}
+                    onOpenForm={() => setDrawFormOpen(true)}
+                  />
                 ) : (
                   <p className="font-body text-sm text-slate-light">
                     Triggers and match control for this event are built in a later prompt.
@@ -119,6 +128,15 @@ export default function EventControlScreen({
           </>
         )}
       </main>
+
+      {selectedEvent?.code === 'E8' && (
+        <E8DrawForm
+          eventId={selectedEvent.id}
+          open={drawFormOpen}
+          onClose={() => setDrawFormOpen(false)}
+          onLocked={() => void load(true)}
+        />
+      )}
     </div>
   );
 }
