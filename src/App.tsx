@@ -1,58 +1,138 @@
-import { supabase } from './lib/supabase';
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
+import LoginScreen from './screens/Login/LoginScreen';
+import ProtectedRoute from './components/ProtectedRoute';
+import AdminHeader from './components/AdminHeader';
+import { getCourtAdminSlug, getTopAdminSlug } from './lib/auth';
 import logo from './assets/logo.png';
 
-if (typeof window !== 'undefined') {
-  // eslint-disable-next-line no-console
-  console.log('Supabase URL:', import.meta.env.VITE_SUPABASE_URL ?? '(unset)');
-  // eslint-disable-next-line no-console
-  console.log('Supabase client initialised:', Boolean(supabase));
-}
-
-export default function App() {
+function PublicPlaceholder() {
   return (
     <div className="min-h-screen bg-navy text-white flex flex-col items-center justify-center px-6 py-10">
-      <img src={logo} alt="Leo Badminton Club" className="h-24 mb-8" />
-
+      <img src={logo} alt="Leo Badminton Club" className="h-24 mb-6" />
       <h1 className="font-display text-4xl text-gold-bright tracking-wide mb-2">
-        Leo Rising Stars
+        Leo Rising Stars 2026
       </h1>
       <p className="font-body text-slate text-lg mb-10">Smash Your Limits</p>
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full max-w-xl">
-        <div className="bg-navy-light border-l-4 border-gold rounded-md p-5">
-          <p className="font-display text-gold uppercase tracking-widest text-sm mb-2">
-            Display Font
-          </p>
-          <p className="font-display text-2xl">Cinzel renders here</p>
-        </div>
-
-        <div className="bg-navy-light border-l-4 border-gold-bright rounded-md p-5">
-          <p className="font-body text-slate uppercase tracking-widest text-xs mb-2">
-            Body Font
-          </p>
-          <p className="font-body text-xl">DM Sans renders here</p>
-        </div>
-
-        <div className="bg-navy-dark rounded-md p-5">
-          <p className="text-slate text-xs uppercase tracking-widest mb-2">Palette</p>
-          <div className="flex gap-2">
-            <span className="w-6 h-6 rounded bg-navy border border-slate" />
-            <span className="w-6 h-6 rounded bg-navy-light border border-slate" />
-            <span className="w-6 h-6 rounded bg-gold" />
-            <span className="w-6 h-6 rounded bg-gold-bright" />
-            <span className="w-6 h-6 rounded bg-amber-warning" />
-          </div>
-        </div>
-
-        <div className="bg-navy-light rounded-md p-5 animate-pulse-gold border-l-4 border-gold-bright">
-          <p className="text-gold-bright text-xs uppercase tracking-widest mb-2">Live</p>
-          <p className="font-display text-xl">Pulse animation</p>
-        </div>
-      </div>
-
+      <p className="font-body text-slate text-sm">
+        Public site coming soon.
+      </p>
       <footer className="mt-12 text-slate text-xs">
         Powered by Zorvance Technology · info@zorvance.com
       </footer>
     </div>
+  );
+}
+
+function AdminPlaceholder({ basePath, loginPath, title }: { basePath: string; loginPath: string; title: string }) {
+  return (
+    <div className="min-h-screen bg-navy text-white flex flex-col">
+      <AdminHeader basePath={basePath} loginPath={loginPath} />
+      <main className="flex-1 max-w-5xl w-full mx-auto px-4 py-8">
+        <h2 className="font-display text-2xl text-gold-bright mb-2">{title}</h2>
+        <p className="font-body text-slate">
+          This screen will be built in a later prompt.
+        </p>
+      </main>
+    </div>
+  );
+}
+
+function MissingSlugBanner() {
+  return (
+    <div className="min-h-screen bg-navy text-white flex flex-col items-center justify-center px-6 py-10">
+      <h1 className="font-display text-2xl text-gold-bright mb-3">Configuration error</h1>
+      <p className="font-body text-slate text-center max-w-md">
+        Admin URL slugs are not configured. Set{' '}
+        <code className="text-gold">VITE_COURT_ADMIN_SLUG</code> and{' '}
+        <code className="text-gold">VITE_TOP_ADMIN_SLUG</code> in your environment and rebuild.
+      </p>
+    </div>
+  );
+}
+
+export default function App() {
+  const courtSlug = getCourtAdminSlug();
+  const topSlug = getTopAdminSlug();
+
+  if (!courtSlug || !topSlug || courtSlug === topSlug) {
+    return (
+      <BrowserRouter>
+        <Routes>
+          <Route path="/" element={<PublicPlaceholder />} />
+          <Route path="*" element={<MissingSlugBanner />} />
+        </Routes>
+      </BrowserRouter>
+    );
+  }
+
+  const courtBase = `/${courtSlug}`;
+  const topBase = `/${topSlug}`;
+
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route path="/" element={<PublicPlaceholder />} />
+
+        <Route
+          path={courtBase}
+          element={<LoginScreen role="court_admin" basePath={courtBase} />}
+        />
+        <Route
+          path={`${courtBase}/picker`}
+          element={
+            <ProtectedRoute role="court_admin" loginPath={courtBase}>
+              <AdminPlaceholder basePath={courtBase} loginPath={courtBase} title="Match Picker" />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path={`${courtBase}/*`}
+          element={
+            <ProtectedRoute role="court_admin" loginPath={courtBase}>
+              <AdminPlaceholder basePath={courtBase} loginPath={courtBase} title="Court Admin" />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path={topBase}
+          element={<LoginScreen role="top_admin" basePath={topBase} />}
+        />
+        <Route
+          path={`${topBase}/picker`}
+          element={
+            <ProtectedRoute role="top_admin" loginPath={topBase}>
+              <AdminPlaceholder basePath={topBase} loginPath={topBase} title="Match Picker" />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path={`${topBase}/event-control`}
+          element={
+            <ProtectedRoute role="top_admin" loginPath={topBase}>
+              <AdminPlaceholder basePath={topBase} loginPath={topBase} title="Event Control" />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path={`${topBase}/champion-board`}
+          element={
+            <ProtectedRoute role="top_admin" loginPath={topBase}>
+              <AdminPlaceholder basePath={topBase} loginPath={topBase} title="Champion Board" />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path={`${topBase}/*`}
+          element={
+            <ProtectedRoute role="top_admin" loginPath={topBase}>
+              <AdminPlaceholder basePath={topBase} loginPath={topBase} title="Top Admin" />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </BrowserRouter>
   );
 }

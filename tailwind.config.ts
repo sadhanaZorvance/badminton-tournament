@@ -39,10 +39,18 @@ const config: Config = {
           '0%': { opacity: '0', transform: 'translateY(12px)' },
           '100%': { opacity: '1', transform: 'translateY(0)' },
         },
+        shake: {
+          '0%, 100%': { transform: 'translateX(0)' },
+          '20%': { transform: 'translateX(-6px)' },
+          '40%': { transform: 'translateX(6px)' },
+          '60%': { transform: 'translateX(-4px)' },
+          '80%': { transform: 'translateX(4px)' },
+        },
       },
       animation: {
         'pulse-gold': 'pulse-gold 1.6s ease-in-out infinite',
         'slide-up-fade': 'slide-up-fade 400ms ease-out',
+        shake: 'shake 300ms ease-in-out',
       },
     },
   },
