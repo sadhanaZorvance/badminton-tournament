@@ -8,6 +8,7 @@ import MatchCard from '../../components/MatchCard';
 import Toast from '../../components/Toast';
 import FormatChip from '../../components/FormatChip';
 import { getSession } from '../../lib/auth';
+import { isDemoMode, runSimulatedMatch, withDemoQuery } from '../../lib/demo';
 import { supabase } from '../../lib/supabase';
 import type {
   Event,
@@ -75,6 +76,9 @@ export default function MatchPickerScreen({ basePath, loginPath }: MatchPickerSc
   } | null>(null);
   const [starting, setStarting] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+
+  const demo = isDemoMode();
+  const [simulatingId, setSimulatingId] = useState<string | null>(null);
 
   const fetchAll = useCallback(async () => {
     const [matchesRes, eventsRes, playersRes, teamsRes] = await Promise.all([
@@ -187,7 +191,7 @@ export default function MatchPickerScreen({ basePath, loginPath }: MatchPickerSc
   }, [inProgressMatches]);
 
   function handleResume(match: Match) {
-    navigate(`${basePath}/score/${match.id}`);
+    navigate(withDemoQuery(`${basePath}/score/${match.id}`));
   }
 
   function handleStartTap(match: Match) {
@@ -219,7 +223,7 @@ export default function MatchPickerScreen({ basePath, loginPath }: MatchPickerSc
         setError(rpcError.message || 'Could not start match');
         return;
       }
-      navigate(`${basePath}/score/${match.id}`);
+      navigate(withDemoQuery(`${basePath}/score/${match.id}`));
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Could not start match';
       setError(message);
@@ -232,6 +236,26 @@ export default function MatchPickerScreen({ basePath, loginPath }: MatchPickerSc
   function handleConfirmOccupiedStart() {
     if (!pendingStart) return;
     void doStart(pendingStart.match, pendingStart.court);
+  }
+
+  async function handleSimulate(match: Match) {
+    if (simulatingId) return;
+    const ev = eventById.get(match.event_id);
+    if (!ev) {
+      setError('Could not resolve event for simulated match');
+      return;
+    }
+    setSimulatingId(match.id);
+    setError(null);
+    try {
+      await runSimulatedMatch({ match, eventCode: ev.code, adminName });
+      await load('refresh');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Simulation failed';
+      setError(message);
+    } finally {
+      setSimulatingId(null);
+    }
   }
 
   const occupiedMatchLabel = pendingStart?.occupiedBy
@@ -306,15 +330,26 @@ export default function MatchPickerScreen({ basePath, loginPath }: MatchPickerSc
                 </h2>
                 <div className="space-y-3">
                   {filteredInProgress.map((match) => (
-                    <MatchCard
-                      key={match.id}
-                      match={match}
-                      variant="live"
-                      eventLabel={eventLabel(match)}
-                      p1Name={nameFor(match.p1_id, match.p1_type, match.p1_ref)}
-                      p2Name={nameFor(match.p2_id, match.p2_type, match.p2_ref)}
-                      onClick={() => handleResume(match)}
-                    />
+                    <div key={match.id} className="space-y-2">
+                      <MatchCard
+                        match={match}
+                        variant="live"
+                        eventLabel={eventLabel(match)}
+                        p1Name={nameFor(match.p1_id, match.p1_type, match.p1_ref)}
+                        p2Name={nameFor(match.p2_id, match.p2_type, match.p2_ref)}
+                        onClick={() => handleResume(match)}
+                      />
+                      {demo && (
+                        <button
+                          type="button"
+                          onClick={() => void handleSimulate(match)}
+                          disabled={simulatingId === match.id}
+                          className="w-full h-10 rounded-md border border-amber-warning/60 bg-amber-warning/10 text-amber-warning font-body text-xs uppercase tracking-wider hover:bg-amber-warning/20 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          {simulatingId === match.id ? 'Simulating…' : 'Simulate Match (demo)'}
+                        </button>
+                      )}
+                    </div>
                   ))}
                 </div>
               </section>
