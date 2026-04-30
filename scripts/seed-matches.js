@@ -156,7 +156,7 @@ async function main() {
       p2_type:          null,
       score_sets:       [],
       match_format:     r.match_format,
-      handicap_applied: code === 'E7',  // E7-wide flag; refined per-match once draw resolves P1/P2.
+      handicap_applied: false,  // Refined below for E7 matches involving players coded P1 or P2.
       status:           r.status,
       inconsistent:     false,
       edit_history:     [],
@@ -173,14 +173,63 @@ async function main() {
   }
 
   console.log(`OK total ${total} match shells seeded.`);
+
+  // E7 handicap refinement: flag matches.handicap_applied=true ONLY for E7
+  // matches where p1_id or p2_id resolves to one of the two U13 girls coded
+  // P1 or P2. At initial seed (before draw is resolved) p1_id/p2_id are null
+  // and this is a no-op; re-run after draw resolution to flag the right rows.
+  await refineE7Handicap(codeToId.E7);
+
   console.log('');
   console.log('Next steps before the event:');
   console.log('  1. Populate scripts/players.csv and run seed-players.js');
   console.log('  2. Resolve R1 player slots from the physical draw sheet');
   console.log('     (set matches.p1_id / p2_id and matches.status="ready")');
-  console.log('  3. E7: set matches.handicap_applied=true ONLY for R1/etc. matches');
-  console.log('     where p1_id or p2_id is one of the two U13 girls coded P1/P2');
+  console.log('  3. Re-run this script (or its refineE7Handicap step) so E7');
+  console.log('     handicap_applied flips to true on matches involving P1/P2');
   console.log('  4. E8 has no pre-seeded matches — uses lock_e8_draw RPC');
+}
+
+// Idempotent. Safe to call before or after draw resolution.
+async function refineE7Handicap(e7EventId) {
+  if (!e7EventId) return;
+
+  const { data: targetPlayers, error: pErr } = await supabase
+    .from('players')
+    .select('id, code')
+    .in('code', ['P1', 'P2']);
+  if (pErr) { console.error('LOOKUP P1/P2 FAILED:', pErr); process.exit(1); }
+
+  if (!targetPlayers || targetPlayers.length === 0) {
+    console.log('SKIP E7 handicap refinement: no players coded P1 or P2 found.');
+    console.log('  (Will apply once players are seeded and draw is resolved.)');
+    return;
+  }
+
+  const targetIds = new Set(targetPlayers.map(p => p.id));
+
+  const { data: e7Matches, error: mErr } = await supabase
+    .from('matches')
+    .select('id, p1_id, p2_id')
+    .eq('event_id', e7EventId);
+  if (mErr) { console.error('FETCH E7 matches FAILED:', mErr); process.exit(1); }
+
+  const idsToFlag = (e7Matches ?? [])
+    .filter(m => targetIds.has(m.p1_id) || targetIds.has(m.p2_id))
+    .map(m => m.id);
+
+  if (idsToFlag.length === 0) {
+    console.log('E7 handicap: no matches yet involve P1 or P2 (draw not resolved).');
+    return;
+  }
+
+  const { error: uErr } = await supabase
+    .from('matches')
+    .update({ handicap_applied: true })
+    .in('id', idsToFlag);
+  if (uErr) { console.error('UPDATE handicap FAILED:', uErr); process.exit(1); }
+
+  console.log(`OK E7 handicap: flagged ${idsToFlag.length} match(es) involving P1/P2`);
 }
 
 main().catch(err => { console.error(err); process.exit(1); });

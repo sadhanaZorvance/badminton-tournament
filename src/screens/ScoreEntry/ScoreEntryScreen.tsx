@@ -30,6 +30,7 @@ interface EntrantInfo {
   id: string;
   name: string;
   type: EntrantType | null;
+  code: string | null;
 }
 
 interface DownstreamPayload {
@@ -162,13 +163,18 @@ export default function ScoreEntryScreen({ basePath, loginPath }: ScoreEntryScre
     const teams = (teamsRes.data ?? []) as Team[];
 
     function resolve(id: string | null, type: EntrantType | null, fallback: string): EntrantInfo {
-      if (!id || !type) return { id: '', name: fallback || 'TBD', type: null };
+      if (!id || !type) return { id: '', name: fallback || 'TBD', type: null, code: null };
       if (type === 'team') {
         const t = teams.find((tt) => tt.id === id);
-        return { id, name: t?.display_name ?? fallback ?? 'TBD', type: 'team' };
+        return { id, name: t?.display_name ?? fallback ?? 'TBD', type: 'team', code: null };
       }
       const pl = players.find((pp) => pp.id === id);
-      return { id, name: pl?.display_name ?? fallback ?? 'TBD', type: 'player' };
+      return {
+        id,
+        name: pl?.display_name ?? fallback ?? 'TBD',
+        type: 'player',
+        code: pl?.code ?? null,
+      };
     }
 
     setMatch(m);
@@ -265,7 +271,16 @@ export default function ScoreEntryScreen({ basePath, loginPath }: ScoreEntryScre
   const handicapBannerText = useMemo(() => {
     if (!match?.handicap_applied) return null;
     if (!p1 || !p2) return null;
-    return `Handicap match — ${p1.name} & ${p2.name} start each set at 3-0. Enter the FINAL score including the head start.`;
+    // Only the players coded P1 / P2 (the two U13 girls) actually receive
+    // the 3-0 head start (BR-015). The opponent does not.
+    const recipients = [p1, p2].filter((e) => e.code === 'P1' || e.code === 'P2');
+    if (recipients.length === 0) return null;
+    const namesText =
+      recipients.length === 2
+        ? `${recipients[0].name} & ${recipients[1].name}`
+        : recipients[0].name;
+    const verb = recipients.length === 2 ? 'start' : 'starts';
+    return `Handicap match — ${namesText} ${verb} each set at 3-0. Enter the FINAL score including the head start.`;
   }, [match, p1, p2]);
 
   function buildDownstreamForResult(result: 'winner' | 'loser'): DownstreamPayload[] {

@@ -64,14 +64,30 @@ export default function MatchCard({
           <div className="flex items-center justify-between gap-3">
             <span className="font-body text-white text-base flex-1 truncate">
               {p1}
-              {handicap && <span className="text-amber-warning ml-1">★</span>}
+              {handicap && (
+                <span
+                  className="text-amber-warning ml-1"
+                  title="Handicap match"
+                  aria-label="Handicap match"
+                >
+                  ★
+                </span>
+              )}
             </span>
             <div className="font-display text-gold-bright text-2xl tabular-nums whitespace-nowrap">
               {lastSet ? `${lastSet.p1} – ${lastSet.p2}` : '— – —'}
             </div>
             <span className="font-body text-white text-base flex-1 truncate text-right">
               {p2}
-              {handicap && <span className="text-amber-warning ml-1">★</span>}
+              {handicap && (
+                <span
+                  className="text-amber-warning ml-1"
+                  title="Handicap match"
+                  aria-label="Handicap match"
+                >
+                  ★
+                </span>
+              )}
             </span>
           </div>
           {match.score_sets && match.score_sets.length > 0 && (
