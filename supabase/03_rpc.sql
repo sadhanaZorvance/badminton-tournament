@@ -852,6 +852,43 @@ $$;
 grant execute on function public.cascade_edit_match(uuid,jsonb,uuid,entrant_type_t,text,boolean,uuid[],jsonb) to anon, authenticated;
 
 -- ──────────────────────────────────────────────────────────────────────────
+-- get_blp_eligible_losers
+-- BR-019: BLP ranking includes only fully-played R1 losers — walkovers and
+-- retirements are excluded (status='complete' only). Returns each loser with
+-- the point margin of their R1 match, ordered closest-margin-first.
+-- ──────────────────────────────────────────────────────────────────────────
+drop function if exists public.get_blp_eligible_losers(uuid);
+create or replace function public.get_blp_eligible_losers(p_event_id uuid)
+returns table (
+  match_id    uuid,
+  player_id   uuid,
+  player_type entrant_type_t,
+  margin      integer
+)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select
+    m.id   as match_id,
+    case when m.winner_id = m.p1_id then m.p2_id   else m.p1_id   end as player_id,
+    case when m.winner_id = m.p1_id then m.p2_type else m.p1_type end as player_type,
+    abs(
+      coalesce((m.score_sets->0->>'p1')::int, 0)
+      - coalesce((m.score_sets->0->>'p2')::int, 0)
+    )::int as margin
+  from public.matches m
+  where m.event_id = p_event_id
+    and m.round    = 'R1'
+    and m.status   = 'complete'
+    and m.winner_id is not null
+  order by margin asc;
+$$;
+
+grant execute on function public.get_blp_eligible_losers(uuid) to anon, authenticated;
+
+-- ──────────────────────────────────────────────────────────────────────────
 -- fire_blp
 -- Compute BLP (best-loser playoff) rankings for E1, create the BLP match.
 -- Idempotent via trigger_records.

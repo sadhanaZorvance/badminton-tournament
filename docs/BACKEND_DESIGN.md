@@ -574,6 +574,17 @@ Errors:
 
 ---
 
+### RPC: get_blp_eligible_losers(event_id)
+**Purpose:** Read-only helper. Returns R1 losers eligible for BLP ranking, ordered by point margin ascending (closest matches first). Walkovers and retirements are excluded — only `status='complete'` R1 matches contribute (BR-019).
+```
+Returns: setof (match_id uuid, player_id uuid, player_type entrant_type_t, margin int)
+Margin = abs(score_sets[0].p1 - score_sets[0].p2)
+        (R1 matches are always single-set set21, so set 1 is the only set.)
+```
+Used by: `fire_blp` (UI may also call this directly to preview rankings).
+
+---
+
 ### RPC: fire_blp(event_id, admin_name)
 **Purpose:** Compute BLP rankings, create BLP match, record trigger
 ```
