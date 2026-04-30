@@ -15,7 +15,7 @@
 05 | COMPLETE | 2026-04-30 14:36 | Global UI Shell + Design System
 
 ## PHASE B — CORE MATCH ENGINE
-06 | PENDING | | Match Picker Screen
+06 | COMPLETE | 2026-04-30 14:40 | Match Picker Screen
 07 | PENDING | | Score Entry Single Set
 08 | PENDING | | Score Entry Best of 3
 09 | PENDING | | Match Completion + Auto-Progression

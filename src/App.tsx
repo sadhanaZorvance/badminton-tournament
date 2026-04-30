@@ -1,6 +1,7 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import LoginScreen from './screens/Login/LoginScreen';
 import MatchPickerScreen from './screens/MatchPicker/MatchPickerScreen';
+import ScoreEntryScreen from './screens/ScoreEntry/ScoreEntryScreen';
 import ProtectedRoute from './components/ProtectedRoute';
 import AdminHeader from './components/AdminHeader';
 import { getCourtAdminSlug, getTopAdminSlug } from './lib/auth';
@@ -87,6 +88,14 @@ export default function App() {
           }
         />
         <Route
+          path={`${courtBase}/score/:matchId`}
+          element={
+            <ProtectedRoute role="court_admin" loginPath={courtBase}>
+              <ScoreEntryScreen basePath={courtBase} loginPath={courtBase} />
+            </ProtectedRoute>
+          }
+        />
+        <Route
           path={`${courtBase}/*`}
           element={
             <ProtectedRoute role="court_admin" loginPath={courtBase}>
@@ -104,6 +113,14 @@ export default function App() {
           element={
             <ProtectedRoute role="top_admin" loginPath={topBase}>
               <MatchPickerScreen basePath={topBase} loginPath={topBase} />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path={`${topBase}/score/:matchId`}
+          element={
+            <ProtectedRoute role="top_admin" loginPath={topBase}>
+              <ScoreEntryScreen basePath={topBase} loginPath={topBase} />
             </ProtectedRoute>
           }
         />
