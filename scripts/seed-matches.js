@@ -102,7 +102,8 @@ function eThreeR1Matches() {
   return eByeBracketMatches();
 }
 
-// E6 — Pure RR with 3 players, no wiring.
+// E6 — Pure RR with 3 players, no wiring. All 3 combinations of P1/P2/P3.
+// pool_id is filled in by ensureE6Pool() after events resolve.
 function e6Matches() {
   return [
     { round: 'ConRR', bracket_slot: 'RR.1', p1_ref: 'P1', p2_ref: 'P2', match_format: 'set21', status: 'pending' },
@@ -141,13 +142,19 @@ async function main() {
   const { error: delErr } = await supabase.from('matches').delete().in('event_id', eventIds);
   if (delErr) { console.error('DELETE existing matches FAILED:', delErr); process.exit(1); }
 
+  // Ensure the E6 Main pool exists before inserting E6 matches so we can
+  // stamp pool_id on them in the same insert.
+  const e6PoolId = await ensureE6Pool(codeToId.E6);
+
   let total = 0;
   for (const [code, build] of Object.entries(eventBuilders)) {
     const eventId = codeToId[code];
+    const poolIdForEvent = code === 'E6' ? e6PoolId : null;
     const rows = build().map(r => ({
       event_id:         eventId,
       round:            r.round,
       bracket_slot:     r.bracket_slot,
+      pool_id:          poolIdForEvent,
       p1_ref:           r.p1_ref,
       p2_ref:           r.p2_ref,
       p1_id:            null,
@@ -180,6 +187,11 @@ async function main() {
   // and this is a no-op; re-run after draw resolution to flag the right rows.
   await refineE7Handicap(codeToId.E7);
 
+  // E6 RR readiness: once the 3 E6 players are seeded, populate p1_id/p2_id
+  // and pool entrants, then flip the 3 RR matches to status='ready'.
+  // No-op until players.csv contains the E6 player codes.
+  await refineE6Readiness(codeToId.E6, e6PoolId);
+
   console.log('');
   console.log('Next steps before the event:');
   console.log('  1. Populate scripts/players.csv and run seed-players.js');
@@ -188,6 +200,111 @@ async function main() {
   console.log('  3. Re-run this script (or its refineE7Handicap step) so E7');
   console.log('     handicap_applied flips to true on matches involving P1/P2');
   console.log('  4. E8 has no pre-seeded matches — uses lock_e8_draw RPC');
+}
+
+// Idempotent: returns the existing E6 Main pool id, or creates it.
+async function ensureE6Pool(e6EventId) {
+  if (!e6EventId) {
+    console.error('ERROR: E6 event id missing — run seed-events.js first.');
+    process.exit(1);
+  }
+
+  const { data: existing, error: selErr } = await supabase
+    .from('pools')
+    .select('id')
+    .eq('event_id', e6EventId)
+    .eq('label', 'Main')
+    .maybeSingle();
+  if (selErr) { console.error('SELECT E6 pool FAILED:', selErr); process.exit(1); }
+
+  if (existing?.id) {
+    console.log(`OK E6 Main pool already exists: ${existing.id}`);
+    return existing.id;
+  }
+
+  const { data, error } = await supabase
+    .from('pools')
+    .insert({ event_id: e6EventId, label: 'Main' })
+    .select('id')
+    .single();
+  if (error) { console.error('INSERT E6 pool FAILED:', error); process.exit(1); }
+
+  console.log(`OK E6 Main pool created: ${data.id}`);
+  return data.id;
+}
+
+// Idempotent. Once 3 E6 players (codes E6P1, E6P2, E6P3) exist:
+//   - upsert pool_entrants for the E6 Main pool
+//   - resolve p1_id/p2_id on the 3 E6 matches
+//   - flip status='ready'
+// No-op until those player codes are seeded.
+async function refineE6Readiness(e6EventId, e6PoolId) {
+  if (!e6EventId || !e6PoolId) return;
+
+  const { data: e6Players, error: pErr } = await supabase
+    .from('players')
+    .select('id, code')
+    .in('code', ['E6P1', 'E6P2', 'E6P3']);
+  if (pErr) { console.error('LOOKUP E6 players FAILED:', pErr); process.exit(1); }
+
+  if (!e6Players || e6Players.length < 3) {
+    console.log('SKIP E6 readiness: need 3 players coded E6P1/E6P2/E6P3 in players table.');
+    console.log('  (Will apply once those codes are seeded via players.csv.)');
+    return;
+  }
+
+  const codeToPlayerId = Object.fromEntries(e6Players.map(p => [p.code, p.id]));
+  const refToPlayerId = {
+    P1: codeToPlayerId.E6P1,
+    P2: codeToPlayerId.E6P2,
+    P3: codeToPlayerId.E6P3,
+  };
+
+  // Upsert pool entrants (3 rows). Idempotent via composite of pool_id+entrant_id.
+  const { data: existingEntrants, error: eErr } = await supabase
+    .from('pool_entrants')
+    .select('entrant_id')
+    .eq('pool_id', e6PoolId);
+  if (eErr) { console.error('SELECT E6 pool_entrants FAILED:', eErr); process.exit(1); }
+  const existingSet = new Set((existingEntrants ?? []).map(e => e.entrant_id));
+
+  const toInsert = Object.values(refToPlayerId)
+    .filter(id => !existingSet.has(id))
+    .map(id => ({ pool_id: e6PoolId, entrant_id: id, entrant_type: 'player' }));
+
+  if (toInsert.length > 0) {
+    const { error: iErr } = await supabase.from('pool_entrants').insert(toInsert);
+    if (iErr) { console.error('INSERT E6 pool_entrants FAILED:', iErr); process.exit(1); }
+    console.log(`OK E6 pool_entrants: inserted ${toInsert.length} entrant(s)`);
+  }
+
+  // Resolve p1_id/p2_id and flip to ready.
+  const { data: e6Matches, error: mErr } = await supabase
+    .from('matches')
+    .select('id, bracket_slot, p1_ref, p2_ref, status')
+    .eq('event_id', e6EventId);
+  if (mErr) { console.error('FETCH E6 matches FAILED:', mErr); process.exit(1); }
+
+  let flipped = 0;
+  for (const m of e6Matches ?? []) {
+    const p1Id = refToPlayerId[m.p1_ref];
+    const p2Id = refToPlayerId[m.p2_ref];
+    if (!p1Id || !p2Id) continue;
+
+    const { error: uErr } = await supabase
+      .from('matches')
+      .update({
+        p1_id: p1Id,
+        p2_id: p2Id,
+        p1_type: 'player',
+        p2_type: 'player',
+        status: 'ready',
+      })
+      .eq('id', m.id);
+    if (uErr) { console.error(`UPDATE E6 match ${m.bracket_slot} FAILED:`, uErr); process.exit(1); }
+    flipped += 1;
+  }
+  console.log(`OK E6 readiness: ${flipped} match(es) resolved and set to status='ready'`);
 }
 
 // Idempotent. Safe to call before or after draw resolution.
