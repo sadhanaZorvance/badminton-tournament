@@ -2,6 +2,7 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import LoginScreen from './screens/Login/LoginScreen';
 import MatchPickerScreen from './screens/MatchPicker/MatchPickerScreen';
 import ScoreEntryScreen from './screens/ScoreEntry/ScoreEntryScreen';
+import EventControlScreen from './screens/EventControl/EventControlScreen';
 import ProtectedRoute from './components/ProtectedRoute';
 import AdminHeader from './components/AdminHeader';
 import { getCourtAdminSlug, getTopAdminSlug } from './lib/auth';
@@ -128,7 +129,7 @@ export default function App() {
           path={`${topBase}/event-control`}
           element={
             <ProtectedRoute role="top_admin" loginPath={topBase}>
-              <AdminPlaceholder basePath={topBase} loginPath={topBase} title="Event Control" />
+              <EventControlScreen basePath={topBase} loginPath={topBase} />
             </ProtectedRoute>
           }
         />

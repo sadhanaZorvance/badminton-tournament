@@ -903,14 +903,14 @@ security definer
 set search_path = public
 as $$
 declare
-  v_existing       record;
-  v_outstanding    int;
-  v_ranked         jsonb;
-  v_blp_match_id   uuid;
-  v_p1_id          uuid;
-  v_p2_id          uuid;
-  v_rankings_count int;
-  v_event_code     text;
+  v_existing            record;
+  v_outstanding_slots   text[];
+  v_ranked              jsonb;
+  v_blp_match_id        uuid;
+  v_p1_id               uuid;
+  v_p2_id               uuid;
+  v_rankings_count      int;
+  v_event_code          text;
 begin
   if p_admin_name is null or length(trim(p_admin_name)) = 0 then
     raise exception 'INVALID_ADMIN_NAME: admin name required';
@@ -926,14 +926,16 @@ begin
     raise exception 'BLP_ALREADY_FIRED: fired by % at %', v_existing.fired_by, v_existing.fired_at;
   end if;
 
-  -- All R1 matches must be terminal
-  select count(*) into v_outstanding
+  -- All R1 matches must be terminal — surface outstanding bracket_slots
+  select coalesce(array_agg(bracket_slot order by bracket_slot), '{}')
+    into v_outstanding_slots
     from public.matches
    where event_id = p_event_id and round = 'R1'
      and status not in ('complete','walkover','retired');
 
-  if v_outstanding > 0 then
-    raise exception 'R1_INCOMPLETE: % R1 matches outstanding', v_outstanding;
+  if array_length(v_outstanding_slots, 1) > 0 then
+    raise exception 'R1_INCOMPLETE: outstanding R1 matches: %',
+      array_to_string(v_outstanding_slots, ',');
   end if;
 
   -- Rank losers from played (status='complete') R1 matches by margin ascending.
