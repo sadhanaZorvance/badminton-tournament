@@ -482,52 +482,66 @@ Errors: match not in_progress → exception
 
 ---
 
-### RPC: complete_match(match_id, winner_id, admin_name)
+### RPC: complete_match(match_id, winner_id, winner_type, admin_name, downstream_updates, loser_downstream_updates)
 **Purpose:** Complete match + resolve all downstream slots atomically
 ```
+Parameters:
+  p_downstream_updates       — slots that should receive the WINNER
+                               (e.g. SF1.winner → F.p1)
+  p_loser_downstream_updates — slots that should receive the LOSER
+                               (e.g. SF1.loser → 3P.p1)
+  Both are computed client-side from src/lib/bracketWiring.ts via
+  getDownstreamSlots(eventCode, bracketSlot, 'winner' | 'loser').
+  Each item: { match_id: uuid, slot: 'p1' | 'p2' }.
+
 Steps:
-  1. Verify match status = 'in_progress'
-  2. UPDATE matches SET status='complete', winner_id=$winner_id,
-     completed_at=now()
-  3. Load bracket wiring config for this match's bracket_slot
-  4. For each downstream slot referencing this match:
-     UPDATE matches SET p1_id or p2_id = $winner_id
-     If both p1_id + p2_id now resolved:
-       UPDATE matches SET status='ready'
-  5. INSERT audit_log {action_type: 'match_completed'}
-  6. Check if ALL matches for this event are complete/walkover/retired:
-     If yes → INSERT podiums {event_id, status='draft',
-               gold/silver/bronze derived from bracket results}
-               INSERT audit_log {action_type: 'podium_drafted'}
+  1. Verify match status = 'in_progress' (else MATCH_NOT_IN_PROGRESS)
+  2. Validate p_winner_id is one of the two opponents (else INVALID_WINNER)
+  3. Derive loser_id/loser_type from match record
+  4. UPDATE matches SET status='complete', winner_id, winner_type,
+     completed_at=now(), entered_by=admin_name
+  5. _resolve_downstream(winner_id, winner_type, p_downstream_updates)
+  6. _resolve_downstream(loser_id,  loser_type,  p_loser_downstream_updates)
+     Each helper call: for every {match_id, slot} update sets p1/p2 on
+     the target match. When both p1_id+p2_id are non-null on a pending
+     match, flip its status to 'ready'.
+  7. INSERT audit_log {action_type: 'match_completed'}
+  8. _maybe_draft_podium: if every event match is in a terminal state and
+     no podium exists yet, INSERT podiums {status='draft',
+     gold/silver/bronze derived from F + 3P + ConF winners}
+     and INSERT audit_log {action_type: 'podium_drafted'}.
 Returns: {success: bool, downstream_updated: int, podium_drafted: bool}
-Errors: match not in_progress → exception
-        transaction failure → full rollback
+Errors: MATCH_NOT_IN_PROGRESS, MATCH_NOT_FOUND, INVALID_WINNER,
+        INVALID_ADMIN_NAME — transaction failure → full rollback
 ```
 
 ---
 
-### RPC: record_walkover(match_id, winner_id, admin_name)
+### RPC: record_walkover(match_id, winner_id, winner_type, admin_name, downstream_updates, loser_downstream_updates)
 **Purpose:** Complete match as walkover, no scores
 ```
 Steps:
-  1. UPDATE matches SET status='walkover', winner_id, completed_at
-  2. Same downstream resolution as complete_match (steps 3–6)
+  1. UPDATE matches SET status='walkover', winner_id, winner_type,
+     score_sets='[]', completed_at, entered_by
+  2. Same downstream + loser resolution as complete_match
   3. INSERT audit_log {action_type: 'match_walkover'}
-Returns: {success: bool}
+  4. _maybe_draft_podium
+Returns: {success, downstream_updated, podium_drafted}
 ```
 
 ---
 
-### RPC: record_retirement(match_id, winner_id, partial_sets, admin_name)
+### RPC: record_retirement(match_id, winner_id, winner_type, partial_sets, admin_name, downstream_updates, loser_downstream_updates)
 **Purpose:** Complete match as retirement with optional partial scores
 ```
 Steps:
-  1. UPDATE matches SET status='retired', winner_id, completed_at,
-     score_sets=$partialSets
-  2. If partial_sets provided: UPSERT sets rows for each
-  3. Same downstream resolution as complete_match (steps 3–6)
+  1. If partial_sets provided: UPSERT sets rows for each
+  2. UPDATE matches SET status='retired', winner_id, winner_type,
+     score_sets=recomputed snapshot, completed_at, entered_by
+  3. Same downstream + loser resolution as complete_match
   4. INSERT audit_log {action_type: 'match_retired'}
-Returns: {success: bool}
+  5. _maybe_draft_podium
+Returns: {success, downstream_updated, podium_drafted}
 ```
 
 ---

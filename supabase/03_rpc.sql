@@ -9,14 +9,18 @@
 --     (e.g. 'MATCH_ALREADY_CLAIMED: ...'). Client parses these.
 --   - Each function runs inside its own implicit transaction. All-or-nothing.
 --
--- p_downstream_updates schema (used by complete_match / record_walkover /
--- record_retirement / cascade_edit_match):
+-- p_downstream_updates / p_loser_downstream_updates schema (used by
+-- complete_match / record_walkover / record_retirement / cascade_edit_match):
 --
 --   [
 --     { "match_id": "<uuid>",  "slot": "p1" | "p2" }
 --   ]
 --
--- The client computes this list from src/lib/bracketWiring.ts before calling.
+-- The client computes both lists from src/lib/bracketWiring.ts:
+--   - p_downstream_updates       → slots that should receive the WINNER
+--                                  (e.g. SF1 winner → F.p1)
+--   - p_loser_downstream_updates → slots that should receive the LOSER
+--                                  (e.g. SF1 loser → 3P.p1)
 -- ============================================================================
 
 -- ──────────────────────────────────────────────────────────────────────────
@@ -401,12 +405,14 @@ grant execute on function public.submit_set(uuid,int,int,int,text) to anon, auth
 -- complete_match
 -- Mark complete + apply downstream wiring + maybe draft podium.
 -- ──────────────────────────────────────────────────────────────────────────
+drop function if exists public.complete_match(uuid,uuid,entrant_type_t,text,jsonb);
 create or replace function public.complete_match(
-  p_match_id            uuid,
-  p_winner_id           uuid,
-  p_winner_type         entrant_type_t,
-  p_admin_name          text,
-  p_downstream_updates  jsonb default '[]'::jsonb
+  p_match_id                 uuid,
+  p_winner_id                uuid,
+  p_winner_type              entrant_type_t,
+  p_admin_name               text,
+  p_downstream_updates       jsonb default '[]'::jsonb,
+  p_loser_downstream_updates jsonb default '[]'::jsonb
 )
 returns jsonb
 language plpgsql
@@ -415,7 +421,10 @@ set search_path = public
 as $$
 declare
   v_match              record;
-  v_downstream_count   int;
+  v_loser_id           uuid;
+  v_loser_type         entrant_type_t;
+  v_winner_count       int;
+  v_loser_count        int;
   v_podium_drafted     boolean;
 begin
   if p_admin_name is null or length(trim(p_admin_name)) = 0 then
@@ -435,6 +444,14 @@ begin
     raise exception 'INVALID_WINNER: winner must be one of the two opponents';
   end if;
 
+  if v_match.p1_id = p_winner_id then
+    v_loser_id   := v_match.p2_id;
+    v_loser_type := v_match.p2_type;
+  else
+    v_loser_id   := v_match.p1_id;
+    v_loser_type := v_match.p1_type;
+  end if;
+
   update public.matches
      set status       = 'complete',
          winner_id    = p_winner_id,
@@ -443,35 +460,41 @@ begin
          entered_by   = p_admin_name
    where id = p_match_id;
 
-  v_downstream_count := public._resolve_downstream(p_winner_id, p_winner_type, p_downstream_updates);
+  v_winner_count := public._resolve_downstream(p_winner_id, p_winner_type, p_downstream_updates);
+  v_loser_count  := public._resolve_downstream(v_loser_id,  v_loser_type,  p_loser_downstream_updates);
 
   insert into public.audit_log (action_type, match_id, event_id, actor_name, payload)
   values (
     'match_completed', p_match_id, v_match.event_id, p_admin_name,
-    jsonb_build_object('winner_id', p_winner_id, 'downstream_updated', v_downstream_count)
+    jsonb_build_object(
+      'winner_id', p_winner_id,
+      'downstream_updated', v_winner_count + v_loser_count
+    )
   );
 
   v_podium_drafted := public._maybe_draft_podium(v_match.event_id, p_admin_name);
 
   return jsonb_build_object(
     'success',            true,
-    'downstream_updated', v_downstream_count,
+    'downstream_updated', v_winner_count + v_loser_count,
     'podium_drafted',     v_podium_drafted
   );
 end;
 $$;
 
-grant execute on function public.complete_match(uuid,uuid,entrant_type_t,text,jsonb) to anon, authenticated;
+grant execute on function public.complete_match(uuid,uuid,entrant_type_t,text,jsonb,jsonb) to anon, authenticated;
 
 -- ──────────────────────────────────────────────────────────────────────────
 -- record_walkover
 -- ──────────────────────────────────────────────────────────────────────────
+drop function if exists public.record_walkover(uuid,uuid,entrant_type_t,text,jsonb);
 create or replace function public.record_walkover(
-  p_match_id           uuid,
-  p_winner_id          uuid,
-  p_winner_type        entrant_type_t,
-  p_admin_name         text,
-  p_downstream_updates jsonb default '[]'::jsonb
+  p_match_id                 uuid,
+  p_winner_id                uuid,
+  p_winner_type              entrant_type_t,
+  p_admin_name               text,
+  p_downstream_updates       jsonb default '[]'::jsonb,
+  p_loser_downstream_updates jsonb default '[]'::jsonb
 )
 returns jsonb
 language plpgsql
@@ -479,9 +502,12 @@ security definer
 set search_path = public
 as $$
 declare
-  v_match            record;
-  v_downstream_count int;
-  v_podium_drafted   boolean;
+  v_match          record;
+  v_loser_id       uuid;
+  v_loser_type     entrant_type_t;
+  v_winner_count   int;
+  v_loser_count    int;
+  v_podium_drafted boolean;
 begin
   if p_admin_name is null or length(trim(p_admin_name)) = 0 then
     raise exception 'INVALID_ADMIN_NAME: admin name required';
@@ -500,6 +526,14 @@ begin
     raise exception 'INVALID_WINNER: winner must be one of the two opponents';
   end if;
 
+  if v_match.p1_id = p_winner_id then
+    v_loser_id   := v_match.p2_id;
+    v_loser_type := v_match.p2_type;
+  else
+    v_loser_id   := v_match.p1_id;
+    v_loser_type := v_match.p1_type;
+  end if;
+
   update public.matches
      set status       = 'walkover',
          winner_id    = p_winner_id,
@@ -509,37 +543,43 @@ begin
          entered_by   = p_admin_name
    where id = p_match_id;
 
-  v_downstream_count := public._resolve_downstream(p_winner_id, p_winner_type, p_downstream_updates);
+  v_winner_count := public._resolve_downstream(p_winner_id, p_winner_type, p_downstream_updates);
+  v_loser_count  := public._resolve_downstream(v_loser_id,  v_loser_type,  p_loser_downstream_updates);
 
   insert into public.audit_log (action_type, match_id, event_id, actor_name, payload)
   values (
     'match_walkover', p_match_id, v_match.event_id, p_admin_name,
-    jsonb_build_object('winner_id', p_winner_id, 'downstream_updated', v_downstream_count)
+    jsonb_build_object(
+      'winner_id', p_winner_id,
+      'downstream_updated', v_winner_count + v_loser_count
+    )
   );
 
   v_podium_drafted := public._maybe_draft_podium(v_match.event_id, p_admin_name);
 
   return jsonb_build_object(
     'success', true,
-    'downstream_updated', v_downstream_count,
+    'downstream_updated', v_winner_count + v_loser_count,
     'podium_drafted', v_podium_drafted
   );
 end;
 $$;
 
-grant execute on function public.record_walkover(uuid,uuid,entrant_type_t,text,jsonb) to anon, authenticated;
+grant execute on function public.record_walkover(uuid,uuid,entrant_type_t,text,jsonb,jsonb) to anon, authenticated;
 
 -- ──────────────────────────────────────────────────────────────────────────
 -- record_retirement
 -- Optional partial scores; same downstream/podium handling as complete_match.
 -- ──────────────────────────────────────────────────────────────────────────
+drop function if exists public.record_retirement(uuid,uuid,entrant_type_t,jsonb,text,jsonb);
 create or replace function public.record_retirement(
-  p_match_id           uuid,
-  p_winner_id          uuid,
-  p_winner_type        entrant_type_t,
-  p_partial_sets       jsonb,            -- [{set_number, p1_score, p2_score}]  may be null
-  p_admin_name         text,
-  p_downstream_updates jsonb default '[]'::jsonb
+  p_match_id                 uuid,
+  p_winner_id                uuid,
+  p_winner_type              entrant_type_t,
+  p_partial_sets             jsonb,            -- [{set_number, p1_score, p2_score}]  may be null
+  p_admin_name               text,
+  p_downstream_updates       jsonb default '[]'::jsonb,
+  p_loser_downstream_updates jsonb default '[]'::jsonb
 )
 returns jsonb
 language plpgsql
@@ -547,12 +587,15 @@ security definer
 set search_path = public
 as $$
 declare
-  v_match            record;
-  v_set              jsonb;
-  v_target           int;
-  v_score_sets       jsonb;
-  v_downstream_count int;
-  v_podium_drafted   boolean;
+  v_match          record;
+  v_set            jsonb;
+  v_target         int;
+  v_score_sets     jsonb;
+  v_loser_id       uuid;
+  v_loser_type     entrant_type_t;
+  v_winner_count   int;
+  v_loser_count    int;
+  v_podium_drafted boolean;
 begin
   if p_admin_name is null or length(trim(p_admin_name)) = 0 then
     raise exception 'INVALID_ADMIN_NAME: admin name required';
@@ -569,6 +612,14 @@ begin
 
   if p_winner_id <> v_match.p1_id and p_winner_id <> v_match.p2_id then
     raise exception 'INVALID_WINNER: winner must be one of the two opponents';
+  end if;
+
+  if v_match.p1_id = p_winner_id then
+    v_loser_id   := v_match.p2_id;
+    v_loser_type := v_match.p2_type;
+  else
+    v_loser_id   := v_match.p1_id;
+    v_loser_type := v_match.p1_type;
   end if;
 
   v_target := case v_match.match_format
@@ -618,7 +669,8 @@ begin
          entered_by   = p_admin_name
    where id = p_match_id;
 
-  v_downstream_count := public._resolve_downstream(p_winner_id, p_winner_type, p_downstream_updates);
+  v_winner_count := public._resolve_downstream(p_winner_id, p_winner_type, p_downstream_updates);
+  v_loser_count  := public._resolve_downstream(v_loser_id,  v_loser_type,  p_loser_downstream_updates);
 
   insert into public.audit_log (action_type, match_id, event_id, actor_name, payload)
   values (
@@ -630,13 +682,13 @@ begin
 
   return jsonb_build_object(
     'success', true,
-    'downstream_updated', v_downstream_count,
+    'downstream_updated', v_winner_count + v_loser_count,
     'podium_drafted', v_podium_drafted
   );
 end;
 $$;
 
-grant execute on function public.record_retirement(uuid,uuid,entrant_type_t,jsonb,text,jsonb) to anon, authenticated;
+grant execute on function public.record_retirement(uuid,uuid,entrant_type_t,jsonb,text,jsonb,jsonb) to anon, authenticated;
 
 -- ──────────────────────────────────────────────────────────────────────────
 -- cascade_edit_match

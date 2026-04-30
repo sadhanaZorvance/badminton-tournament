@@ -268,11 +268,13 @@ export default function ScoreEntryScreen({ basePath, loginPath }: ScoreEntryScre
     return `Handicap match — ${p1.name} & ${p2.name} start each set at 3-0. Enter the FINAL score including the head start.`;
   }, [match, p1, p2]);
 
-  function buildDownstreamUpdates(): DownstreamPayload[] {
+  function buildDownstreamForResult(result: 'winner' | 'loser'): DownstreamPayload[] {
     if (!match || !event) return [];
-    const rules = getDownstreamSlots(event.code, match.bracket_slot, 'winner');
+    const rules = getDownstreamSlots(event.code, match.bracket_slot, result);
     const updates: DownstreamPayload[] = [];
     for (const rule of rules) {
+      // Only p1/p2 slot targets are resolvable here. Pool slots (slot1/slot2/
+      // slot3) are filled by the consolation-pool RPC, not by this wiring.
       if (rule.targetSlot !== 'p1' && rule.targetSlot !== 'p2') continue;
       const targetMatch = eventMatches.find((em) => em.bracket_slot === rule.target);
       if (!targetMatch) continue;
@@ -286,13 +288,15 @@ export default function ScoreEntryScreen({ basePath, loginPath }: ScoreEntryScre
     setCompleteError(null);
     setCompleting(true);
     try {
-      const downstream = buildDownstreamUpdates();
+      const winnerDownstream = buildDownstreamForResult('winner');
+      const loserDownstream = buildDownstreamForResult('loser');
       const { error: rpcError } = await supabase.rpc('complete_match', {
         p_match_id: match.id,
         p_winner_id: matchWinner.id,
         p_winner_type: matchWinner.type,
         p_admin_name: adminName,
-        p_downstream_updates: downstream,
+        p_downstream_updates: winnerDownstream,
+        p_loser_downstream_updates: loserDownstream,
       });
       if (rpcError) {
         setCompleteError(rpcErrorMessage(rpcError.message, 'Could not complete match'));
@@ -329,7 +333,8 @@ export default function ScoreEntryScreen({ basePath, loginPath }: ScoreEntryScre
       return;
     }
 
-    const downstream = buildDownstreamUpdates();
+    const winnerDownstream = buildDownstreamForResult('winner');
+    const loserDownstream = buildDownstreamForResult('loser');
 
     setRecording(true);
     try {
@@ -339,7 +344,8 @@ export default function ScoreEntryScreen({ basePath, loginPath }: ScoreEntryScre
           p_winner_id: winnerId,
           p_winner_type: winnerType,
           p_admin_name: adminName,
-          p_downstream_updates: downstream,
+          p_downstream_updates: winnerDownstream,
+          p_loser_downstream_updates: loserDownstream,
         });
         if (rpcError) {
           setRecordError(rpcErrorMessage(rpcError.message, 'Could not record walkover'));
@@ -363,7 +369,8 @@ export default function ScoreEntryScreen({ basePath, loginPath }: ScoreEntryScre
           p_winner_type: winnerType,
           p_partial_sets: partialSets,
           p_admin_name: adminName,
-          p_downstream_updates: downstream,
+          p_downstream_updates: winnerDownstream,
+          p_loser_downstream_updates: loserDownstream,
         });
         if (rpcError) {
           setRecordError(rpcErrorMessage(rpcError.message, 'Could not record retirement'));
