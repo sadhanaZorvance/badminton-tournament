@@ -5,6 +5,7 @@ import LoadingSkeleton from '../../components/LoadingSkeleton';
 import { supabase } from '../../lib/supabase';
 import type { Event } from '../../types';
 import BLPTriggerPanel from './BLPTriggerPanel';
+import ConsolationPoolTriggerPanel from './ConsolationPoolTriggerPanel';
 
 interface EventControlScreenProps {
   basePath: string;
@@ -100,7 +101,10 @@ export default function EventControlScreen({
                 </header>
 
                 {selectedEvent.code === 'E1' ? (
-                  <BLPTriggerPanel eventId={selectedEvent.id} />
+                  <div className="space-y-4">
+                    <BLPTriggerPanel eventId={selectedEvent.id} />
+                    <ConsolationPoolTriggerPanel eventId={selectedEvent.id} />
+                  </div>
                 ) : (
                   <p className="font-body text-sm text-slate-light">
                     Triggers and match control for this event are built in a later prompt.
