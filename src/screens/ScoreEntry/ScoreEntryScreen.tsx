@@ -16,6 +16,7 @@ import type {
   Match,
   MatchFormat,
   MatchSet,
+  MatchStatus,
   Player,
   Team,
 } from '../../types';
@@ -37,6 +38,7 @@ interface DownstreamPayload {
 }
 
 type RecordType = 'walkover' | 'retired';
+type SetNumber = 1 | 2 | 3;
 
 function targetForFormat(format: MatchFormat): number {
   switch (format) {
@@ -71,6 +73,13 @@ function eventLabel(ev: Event | null, match: Match | null): string {
   return `${ev.name} · ${roundLabel[round] ?? round}`;
 }
 
+function setWinnerSide(s: MatchSet | null): 'p1' | 'p2' | null {
+  if (!s || !s.complete) return null;
+  if (s.p1_score > s.p2_score) return 'p1';
+  if (s.p2_score > s.p1_score) return 'p2';
+  return null;
+}
+
 export default function ScoreEntryScreen({ basePath, loginPath }: ScoreEntryScreenProps) {
   const { matchId } = useParams<{ matchId: string }>();
   const navigate = useNavigate();
@@ -88,14 +97,6 @@ export default function ScoreEntryScreen({ basePath, loginPath }: ScoreEntryScre
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
-  // Set 1 entry state
-  const [editing, setEditing] = useState(false);
-  const [p1Input, setP1Input] = useState<number | ''>('');
-  const [p2Input, setP2Input] = useState<number | ''>('');
-  const [validationError, setValidationError] = useState<string | null>(null);
-  const [submitError, setSubmitError] = useState<string | null>(null);
-  const [submitting, setSubmitting] = useState(false);
-
   // Mark Complete modal
   const [showCompleteModal, setShowCompleteModal] = useState(false);
   const [completing, setCompleting] = useState(false);
@@ -111,7 +112,7 @@ export default function ScoreEntryScreen({ basePath, loginPath }: ScoreEntryScre
   const [recording, setRecording] = useState(false);
   const [recordError, setRecordError] = useState<string | null>(null);
 
-  const fetchMatch = useCallback(async (): Promise<{ match: Match; set1: MatchSet | null }> => {
+  const fetchMatch = useCallback(async (): Promise<void> => {
     if (!matchId) throw new Error('No match id in URL');
 
     const matchRes = await supabase
@@ -176,23 +177,13 @@ export default function ScoreEntryScreen({ basePath, loginPath }: ScoreEntryScre
     setEventMatches(evMatches);
     setP1(resolve(m.p1_id, m.p1_type, m.p1_ref));
     setP2(resolve(m.p2_id, m.p2_type, m.p2_ref));
-
-    return { match: m, set1: sets.find((s) => s.set_number === 1) ?? null };
   }, [matchId]);
 
   const load = useCallback(async () => {
     setLoading(true);
     setLoadError(null);
     try {
-      const { set1 } = await fetchMatch();
-      // If no set 1 yet, default to editing mode so inputs are visible.
-      if (!set1) {
-        setEditing(true);
-        setP1Input('');
-        setP2Input('');
-      } else {
-        setEditing(false);
-      }
+      await fetchMatch();
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Could not load match';
       setLoadError(msg);
@@ -206,7 +197,19 @@ export default function ScoreEntryScreen({ basePath, loginPath }: ScoreEntryScre
   }, [load]);
 
   const target = match ? targetForFormat(match.match_format) : 21;
+  const isBestOf3 = match?.match_format === 'best_of_3x15';
+
   const set1 = useMemo(() => matchSets.find((s) => s.set_number === 1) ?? null, [matchSets]);
+  const set2 = useMemo(() => matchSets.find((s) => s.set_number === 2) ?? null, [matchSets]);
+  const set3 = useMemo(() => matchSets.find((s) => s.set_number === 3) ?? null, [matchSets]);
+
+  // Set 3 renders only after Set 2 completes AND the two players have split sets 1-1.
+  const showSet3 = useMemo(() => {
+    if (!isBestOf3) return false;
+    const w1 = setWinnerSide(set1);
+    const w2 = setWinnerSide(set2);
+    return !!w1 && !!w2 && w1 !== w2;
+  }, [isBestOf3, set1, set2]);
 
   const matchTerminal = useMemo(() => {
     if (!match) return false;
@@ -222,36 +225,51 @@ export default function ScoreEntryScreen({ basePath, loginPath }: ScoreEntryScre
     return false;
   }, [match, isTopAdmin, event]);
 
-  const winnerFromSet1 = useMemo<{
+  // Winner is derived from completed sets:
+  // - set21 / set30: one set winner = match winner
+  // - best_of_3x15: first player to 2 set wins
+  const matchWinner = useMemo<{
     id: string;
     type: EntrantType;
     name: string;
-    score: string;
+    scoresText: string;
   } | null>(() => {
-    if (!match || !set1 || !set1.complete) return null;
-    if (match.match_format === 'best_of_3x15') return null; // single-set screens only
+    if (!match) return null;
     if (!match.p1_id || !match.p2_id || !match.p1_type || !match.p2_type) return null;
-    const p1Won = set1.p1_score > set1.p2_score;
-    const winnerId = p1Won ? match.p1_id : match.p2_id;
-    const winnerType = p1Won ? match.p1_type : match.p2_type;
-    const name = p1Won ? p1?.name ?? '' : p2?.name ?? '';
-    const score = `${set1.p1_score}–${set1.p2_score}`;
-    return { id: winnerId, type: winnerType, name, score };
-  }, [match, set1, p1, p2]);
 
-  const canMarkComplete =
-    !!match && match.status === 'in_progress' && !!winnerFromSet1;
+    const completed = matchSets
+      .filter((s) => s.complete)
+      .sort((a, b) => a.set_number - b.set_number);
+    const p1Wins = completed.filter((s) => s.p1_score > s.p2_score).length;
+    const p2Wins = completed.filter((s) => s.p2_score > s.p1_score).length;
 
-  // Handicap banner — for E7 the rule names which players carry the head start.
+    let winnerSide: 'p1' | 'p2' | null = null;
+    if (match.match_format === 'best_of_3x15') {
+      if (p1Wins >= 2) winnerSide = 'p1';
+      else if (p2Wins >= 2) winnerSide = 'p2';
+    } else {
+      if (p1Wins >= 1) winnerSide = 'p1';
+      else if (p2Wins >= 1) winnerSide = 'p2';
+    }
+    if (!winnerSide) return null;
+
+    const winnerId = winnerSide === 'p1' ? match.p1_id : match.p2_id;
+    const winnerType = winnerSide === 'p1' ? match.p1_type : match.p2_type;
+    const name = winnerSide === 'p1' ? p1?.name ?? '' : p2?.name ?? '';
+    const scoresText = completed.map((s) => `${s.p1_score}–${s.p2_score}`).join(', ');
+    return { id: winnerId, type: winnerType, name, scoresText };
+  }, [match, matchSets, p1, p2]);
+
+  const canMarkComplete = !!match && match.status === 'in_progress' && !!matchWinner;
+
   const handicapBannerText = useMemo(() => {
     if (!match?.handicap_applied) return null;
     if (!p1 || !p2) return null;
     return `Handicap match — ${p1.name} & ${p2.name} start each set at 3-0. Enter the FINAL score including the head start.`;
   }, [match, p1, p2]);
 
-  function buildDownstreamUpdates(winnerSlot: 'p1' | 'p2'): DownstreamPayload[] {
+  function buildDownstreamUpdates(): DownstreamPayload[] {
     if (!match || !event) return [];
-    void winnerSlot;
     const rules = getDownstreamSlots(event.code, match.bracket_slot, 'winner');
     const updates: DownstreamPayload[] = [];
     for (const rule of rules) {
@@ -263,80 +281,16 @@ export default function ScoreEntryScreen({ basePath, loginPath }: ScoreEntryScre
     return updates;
   }
 
-  function validateSet(p1Val: number | '', p2Val: number | ''): string | null {
-    if (p1Val === '' || p2Val === '') {
-      return `Enter both scores. One player must reach ${target}.`;
-    }
-    if (p1Val < 0 || p2Val < 0) return 'Scores cannot be negative.';
-    const p1IsTarget = p1Val === target;
-    const p2IsTarget = p2Val === target;
-    if (p1IsTarget && p2IsTarget) {
-      return `Only one player can reach ${target}.`;
-    }
-    if (!p1IsTarget && !p2IsTarget) {
-      return `One player must reach ${target}. Other must be lower.`;
-    }
-    const other = p1IsTarget ? p2Val : p1Val;
-    if (other < 0 || other > target - 1) {
-      return `One player must reach ${target}. Other must be 0 to ${target - 1}.`;
-    }
-    return null;
-  }
-
-  function handleStartEdit() {
-    if (!set1) return;
-    setEditing(true);
-    setP1Input(set1.p1_score);
-    setP2Input(set1.p2_score);
-    setValidationError(null);
-    setSubmitError(null);
-  }
-
-  async function handleSubmitSet() {
-    if (!match || submitting) return;
-    setValidationError(null);
-    setSubmitError(null);
-    const err = validateSet(p1Input, p2Input);
-    if (err) {
-      setValidationError(err);
-      return;
-    }
-    const p1Val = p1Input as number;
-    const p2Val = p2Input as number;
-    setSubmitting(true);
-    try {
-      const { error: rpcError } = await supabase.rpc('submit_set', {
-        p_match_id: match.id,
-        p_set_number: 1,
-        p_p1_score: p1Val,
-        p_p2_score: p2Val,
-        p_admin_name: adminName,
-      });
-      if (rpcError) {
-        setSubmitError(rpcErrorMessage(rpcError.message, 'Score could not be saved'));
-        return;
-      }
-      await fetchMatch();
-      setEditing(false);
-    } catch (caught) {
-      const msg = caught instanceof Error ? caught.message : 'Score could not be saved';
-      setSubmitError(msg);
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
   async function handleConfirmComplete() {
-    if (!match || !winnerFromSet1 || completing) return;
+    if (!match || !matchWinner || completing) return;
     setCompleteError(null);
     setCompleting(true);
     try {
-      const winnerSlot: 'p1' | 'p2' = match.p1_id === winnerFromSet1.id ? 'p1' : 'p2';
-      const downstream = buildDownstreamUpdates(winnerSlot);
+      const downstream = buildDownstreamUpdates();
       const { error: rpcError } = await supabase.rpc('complete_match', {
         p_match_id: match.id,
-        p_winner_id: winnerFromSet1.id,
-        p_winner_type: winnerFromSet1.type,
+        p_winner_id: matchWinner.id,
+        p_winner_type: matchWinner.type,
         p_admin_name: adminName,
         p_downstream_updates: downstream,
       });
@@ -375,7 +329,7 @@ export default function ScoreEntryScreen({ basePath, loginPath }: ScoreEntryScre
       return;
     }
 
-    const downstream = buildDownstreamUpdates(recordWinnerSide);
+    const downstream = buildDownstreamUpdates();
 
     setRecording(true);
     try {
@@ -488,99 +442,51 @@ export default function ScoreEntryScreen({ basePath, loginPath }: ScoreEntryScre
               </div>
             )}
 
-            <section className="rounded-lg bg-navy-light/60 border border-navy-light p-4 mb-5">
-              <div className="flex items-center justify-between mb-3">
-                <h2 className="font-body text-xs uppercase tracking-[0.2em] text-slate">
-                  Set 1 · First to {target}
-                </h2>
-                {set1?.complete && !editing && canEditSet && (
-                  <button
-                    type="button"
-                    onClick={handleStartEdit}
-                    className="text-gold-bright hover:text-gold text-sm font-body underline-offset-4 hover:underline px-1 py-1"
-                  >
-                    Edit
-                  </button>
-                )}
-              </div>
+            <SetEntrySection
+              key={`set-1-${set1?.id ?? 'new'}`}
+              setNumber={1}
+              target={target}
+              existingSet={set1}
+              matchId={match.id}
+              matchStatus={match.status}
+              p1Name={p1.name}
+              p2Name={p2.name}
+              canEditSet={canEditSet}
+              adminName={adminName}
+              onAfterSubmit={fetchMatch}
+            />
 
-              {editing ? (
-                <>
-                  <div className="grid grid-cols-2 gap-4 items-end">
-                    <ScoreInput
-                      value={p1Input}
-                      onChange={(v) => {
-                        setP1Input(v);
-                        setValidationError(null);
-                      }}
-                      playerName={p1.name}
-                      disabled={submitting}
-                    />
-                    <ScoreInput
-                      value={p2Input}
-                      onChange={(v) => {
-                        setP2Input(v);
-                        setValidationError(null);
-                      }}
-                      playerName={p2.name}
-                      disabled={submitting}
-                    />
-                  </div>
+            {isBestOf3 && set1?.complete && (
+              <SetEntrySection
+                key={`set-2-${set2?.id ?? 'new'}`}
+                setNumber={2}
+                target={target}
+                existingSet={set2}
+                matchId={match.id}
+                matchStatus={match.status}
+                p1Name={p1.name}
+                p2Name={p2.name}
+                canEditSet={canEditSet}
+                adminName={adminName}
+                onAfterSubmit={fetchMatch}
+              />
+            )}
 
-                  {validationError && (
-                    <p
-                      role="alert"
-                      className="mt-3 text-sm text-error font-body"
-                    >
-                      {validationError}
-                    </p>
-                  )}
-
-                  <button
-                    type="button"
-                    onClick={() => void handleSubmitSet()}
-                    disabled={submitting}
-                    className="mt-4 w-full h-11 rounded-md bg-gold text-navy-dark font-body font-semibold tracking-wide uppercase text-sm transition disabled:bg-navy-light disabled:text-slate disabled:cursor-not-allowed hover:bg-gold-bright"
-                  >
-                    {submitting ? 'Saving…' : 'Submit Set'}
-                  </button>
-
-                  {submitError && (
-                    <div className="mt-3">
-                      <ErrorBanner
-                        message={submitError}
-                        onRetry={() => void handleSubmitSet()}
-                      />
-                    </div>
-                  )}
-                </>
-              ) : set1 ? (
-                <div className="flex items-center justify-between gap-4">
-                  <div className="flex-1 grid grid-cols-2 gap-4">
-                    <div className="text-center">
-                      <p className="font-body text-xs text-slate uppercase tracking-wider mb-1">
-                        {p1.name}
-                      </p>
-                      <p className="font-display text-3xl text-white tabular-nums">
-                        {set1.p1_score}
-                      </p>
-                    </div>
-                    <div className="text-center">
-                      <p className="font-body text-xs text-slate uppercase tracking-wider mb-1">
-                        {p2.name}
-                      </p>
-                      <p className="font-display text-3xl text-white tabular-nums">
-                        {set1.p2_score}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <p className="text-slate font-body text-sm">
-                  Enter Set 1 scores to begin.
-                </p>
-              )}
-            </section>
+            {showSet3 && (
+              <SetEntrySection
+                key={`set-3-${set3?.id ?? 'new'}`}
+                setNumber={3}
+                target={target}
+                existingSet={set3}
+                matchId={match.id}
+                matchStatus={match.status}
+                p1Name={p1.name}
+                p2Name={p2.name}
+                canEditSet={canEditSet}
+                adminName={adminName}
+                onAfterSubmit={fetchMatch}
+              />
+            )}
 
             {completeError && (
               <ErrorBanner
@@ -621,13 +527,13 @@ export default function ScoreEntryScreen({ basePath, loginPath }: ScoreEntryScre
         )}
       </main>
 
-      {showCompleteModal && winnerFromSet1 && (
+      {showCompleteModal && matchWinner && (
         <ConfirmModal
-          title={`${winnerFromSet1.name} wins`}
+          title={`${matchWinner.name} wins`}
           body={
             <>
               <p className="font-display text-xl text-gold-bright tabular-nums mb-2">
-                {winnerFromSet1.score}
+                {matchWinner.scoresText}
               </p>
               <p>This will lock the match and advance the bracket.</p>
               {completeError && (
@@ -676,6 +582,201 @@ export default function ScoreEntryScreen({ basePath, loginPath }: ScoreEntryScre
         />
       )}
     </div>
+  );
+}
+
+interface SetEntrySectionProps {
+  setNumber: SetNumber;
+  target: number;
+  existingSet: MatchSet | null;
+  matchId: string;
+  matchStatus: MatchStatus;
+  p1Name: string;
+  p2Name: string;
+  canEditSet: boolean;
+  adminName: string;
+  onAfterSubmit: () => Promise<void>;
+}
+
+function SetEntrySection({
+  setNumber,
+  target,
+  existingSet,
+  matchId,
+  matchStatus,
+  p1Name,
+  p2Name,
+  canEditSet,
+  adminName,
+  onAfterSubmit,
+}: SetEntrySectionProps) {
+  const [editing, setEditing] = useState(!existingSet || !existingSet.complete);
+  const [p1Input, setP1Input] = useState<number | ''>(existingSet?.p1_score ?? '');
+  const [p2Input, setP2Input] = useState<number | ''>(existingSet?.p2_score ?? '');
+  const [validationError, setValidationError] = useState<string | null>(null);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  // Only allow score-edit interactions while the parent match is editable.
+  const canSubmit = matchStatus === 'in_progress' || (canEditSet && matchStatus === 'complete');
+
+  function validateSet(p1Val: number | '', p2Val: number | ''): string | null {
+    if (p1Val === '' || p2Val === '') {
+      return `Enter both scores. One player must reach ${target}.`;
+    }
+    if (p1Val < 0 || p2Val < 0) return 'Scores cannot be negative.';
+    const p1IsTarget = p1Val === target;
+    const p2IsTarget = p2Val === target;
+    if (p1IsTarget && p2IsTarget) {
+      return `Only one player can reach ${target}.`;
+    }
+    if (!p1IsTarget && !p2IsTarget) {
+      return `One player must reach ${target}. Other must be lower.`;
+    }
+    const other = p1IsTarget ? p2Val : p1Val;
+    if (other < 0 || other > target - 1) {
+      return `One player must reach ${target}. Other must be 0 to ${target - 1}.`;
+    }
+    return null;
+  }
+
+  function handleStartEdit() {
+    if (!existingSet) return;
+    setP1Input(existingSet.p1_score);
+    setP2Input(existingSet.p2_score);
+    setEditing(true);
+    setValidationError(null);
+    setSubmitError(null);
+  }
+
+  async function handleSubmit() {
+    if (submitting || !canSubmit) return;
+    setValidationError(null);
+    setSubmitError(null);
+    const err = validateSet(p1Input, p2Input);
+    if (err) {
+      setValidationError(err);
+      return;
+    }
+    const p1Val = p1Input as number;
+    const p2Val = p2Input as number;
+    setSubmitting(true);
+    try {
+      const { error: rpcError } = await supabase.rpc('submit_set', {
+        p_match_id: matchId,
+        p_set_number: setNumber,
+        p_p1_score: p1Val,
+        p_p2_score: p2Val,
+        p_admin_name: adminName,
+      });
+      if (rpcError) {
+        setSubmitError(rpcErrorMessage(rpcError.message, 'Score could not be saved'));
+        return;
+      }
+      await onAfterSubmit();
+      setEditing(false);
+    } catch (caught) {
+      const msg = caught instanceof Error ? caught.message : 'Score could not be saved';
+      setSubmitError(msg);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <section className="rounded-lg bg-navy-light/60 border border-navy-light p-4 mb-5">
+      <div className="flex items-center justify-between mb-3">
+        <h2 className="font-body text-xs uppercase tracking-[0.2em] text-slate">
+          Set {setNumber} · First to {target}
+        </h2>
+        {existingSet?.complete && !editing && canEditSet && (
+          <button
+            type="button"
+            onClick={handleStartEdit}
+            className="text-gold-bright hover:text-gold text-sm font-body underline-offset-4 hover:underline px-1 py-1"
+          >
+            Edit
+          </button>
+        )}
+      </div>
+
+      {editing ? (
+        <>
+          <div className="grid grid-cols-2 gap-4 items-end">
+            <ScoreInput
+              value={p1Input}
+              onChange={(v) => {
+                setP1Input(v);
+                setValidationError(null);
+              }}
+              playerName={p1Name}
+              disabled={submitting}
+            />
+            <ScoreInput
+              value={p2Input}
+              onChange={(v) => {
+                setP2Input(v);
+                setValidationError(null);
+              }}
+              playerName={p2Name}
+              disabled={submitting}
+            />
+          </div>
+
+          {validationError && (
+            <p
+              role="alert"
+              className="mt-3 text-sm text-error font-body"
+            >
+              {validationError}
+            </p>
+          )}
+
+          <button
+            type="button"
+            onClick={() => void handleSubmit()}
+            disabled={submitting || !canSubmit}
+            className="mt-4 w-full h-11 rounded-md bg-gold text-navy-dark font-body font-semibold tracking-wide uppercase text-sm transition disabled:bg-navy-light disabled:text-slate disabled:cursor-not-allowed hover:bg-gold-bright"
+          >
+            {submitting ? 'Saving…' : 'Submit Set'}
+          </button>
+
+          {submitError && (
+            <div className="mt-3">
+              <ErrorBanner
+                message={submitError}
+                onRetry={() => void handleSubmit()}
+              />
+            </div>
+          )}
+        </>
+      ) : existingSet ? (
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex-1 grid grid-cols-2 gap-4">
+            <div className="text-center">
+              <p className="font-body text-xs text-slate uppercase tracking-wider mb-1">
+                {p1Name}
+              </p>
+              <p className="font-display text-3xl text-white tabular-nums">
+                {existingSet.p1_score}
+              </p>
+            </div>
+            <div className="text-center">
+              <p className="font-body text-xs text-slate uppercase tracking-wider mb-1">
+                {p2Name}
+              </p>
+              <p className="font-display text-3xl text-white tabular-nums">
+                {existingSet.p2_score}
+              </p>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <p className="text-slate font-body text-sm">
+          Enter Set {setNumber} scores to begin.
+        </p>
+      )}
+    </section>
   );
 }
 
