@@ -119,6 +119,26 @@ export default function ScoreEntryScreen({ basePath, loginPath }: ScoreEntryScre
   const [simulating, setSimulating] = useState(false);
   const [simulateError, setSimulateError] = useState<string | null>(null);
 
+  // Top Admin cascade-edit flow (BR-023, TA-01/TA-02).
+  const [editMode, setEditMode] = useState(false);
+  const [editP1S1, setEditP1S1] = useState<number | ''>('');
+  const [editP2S1, setEditP2S1] = useState<number | ''>('');
+  const [editP1S2, setEditP1S2] = useState<number | ''>('');
+  const [editP2S2, setEditP2S2] = useState<number | ''>('');
+  const [editP1S3, setEditP1S3] = useState<number | ''>('');
+  const [editP2S3, setEditP2S3] = useState<number | ''>('');
+  const [editValidationError, setEditValidationError] = useState<string | null>(null);
+  const [cascadeError, setCascadeError] = useState<string | null>(null);
+  const [cascadeSubmitting, setCascadeSubmitting] = useState(false);
+  const [pendingCascade, setPendingCascade] = useState<{
+    newScoreSets: { p1: number; p2: number; complete: boolean }[];
+    winnerId: string;
+    winnerType: EntrantType;
+    downstreamUpdates: DownstreamPayload[];
+    downstreamMatchIds: string[];
+    affected: { id: string; label: string }[];
+  } | null>(null);
+
   const fetchMatch = useCallback(async (): Promise<void> => {
     if (!matchId) throw new Error('No match id in URL');
 
@@ -228,13 +248,20 @@ export default function ScoreEntryScreen({ basePath, loginPath }: ScoreEntryScre
     return match.status === 'complete' || match.status === 'walkover' || match.status === 'retired';
   }, [match]);
 
-  // Court Admin: edit available while match is in_progress only.
-  // Top Admin: edit available while event is not published (covers complete/in_progress).
+  // Per-set inline edit is reserved for the in_progress flow. Once a match is
+  // complete, edits go through the Top Admin cascade-edit path instead so
+  // downstream slots stay correct (BR-006, BR-023).
   const canEditSet = useMemo(() => {
     if (!match) return false;
-    if (match.status === 'in_progress') return true;
-    if (isTopAdmin && match.status === 'complete' && event?.status !== 'published') return true;
-    return false;
+    return match.status === 'in_progress';
+  }, [match]);
+
+  // Top Admin override on a completed match — gated by event-not-published
+  // (BR-022). This drives the "Edit Result" button + cascade modal flow.
+  const canCascadeEdit = useMemo(() => {
+    if (!match || !isTopAdmin) return false;
+    if (event?.status === 'published') return false;
+    return match.status === 'complete';
   }, [match, isTopAdmin, event]);
 
   // Winner is derived from completed sets:
@@ -422,6 +449,198 @@ export default function ScoreEntryScreen({ basePath, loginPath }: ScoreEntryScre
     }
   }
 
+  function handleStartEdit() {
+    if (!match || !canCascadeEdit) return;
+    const s1 = matchSets.find((s) => s.set_number === 1);
+    const s2 = matchSets.find((s) => s.set_number === 2);
+    const s3 = matchSets.find((s) => s.set_number === 3);
+    setEditP1S1(s1?.p1_score ?? '');
+    setEditP2S1(s1?.p2_score ?? '');
+    setEditP1S2(s2?.p1_score ?? '');
+    setEditP2S2(s2?.p2_score ?? '');
+    setEditP1S3(s3?.p1_score ?? '');
+    setEditP2S3(s3?.p2_score ?? '');
+    setEditValidationError(null);
+    setCascadeError(null);
+    setEditMode(true);
+  }
+
+  function handleCancelEdit() {
+    if (cascadeSubmitting) return;
+    setEditMode(false);
+    setEditValidationError(null);
+    setCascadeError(null);
+    setPendingCascade(null);
+  }
+
+  function validateSetPair(
+    p1Val: number | '',
+    p2Val: number | '',
+    target: number,
+    setLabel: string,
+  ): string | null {
+    if (p1Val === '' || p2Val === '') {
+      return `${setLabel}: enter both scores. One player must reach ${target}.`;
+    }
+    if (p1Val < 0 || p2Val < 0) return `${setLabel}: scores cannot be negative.`;
+    const p1IsTarget = p1Val === target;
+    const p2IsTarget = p2Val === target;
+    if (p1IsTarget && p2IsTarget) return `${setLabel}: only one player can reach ${target}.`;
+    if (!p1IsTarget && !p2IsTarget) return `${setLabel}: one player must reach ${target}.`;
+    const other = p1IsTarget ? p2Val : p1Val;
+    if (other < 0 || other > target - 1) {
+      return `${setLabel}: one player must reach ${target}. Other must be 0 to ${target - 1}.`;
+    }
+    return null;
+  }
+
+  // Validate the full edit form and compute the new winner. Returns null on
+  // failure (with editValidationError set) or the payload to send to the RPC.
+  function buildEditPayload():
+    | {
+        newScoreSets: { p1: number; p2: number; complete: boolean }[];
+        winnerId: string;
+        winnerType: EntrantType;
+      }
+    | null {
+    if (!match || !p1 || !p2) return null;
+    if (!match.p1_id || !match.p2_id || !match.p1_type || !match.p2_type) {
+      setEditValidationError('Match opponents not resolved — cannot edit.');
+      return null;
+    }
+
+    const s1Err = validateSetPair(editP1S1, editP2S1, target, 'Set 1');
+    if (s1Err) {
+      setEditValidationError(s1Err);
+      return null;
+    }
+    const s1: { p1: number; p2: number; complete: boolean } = {
+      p1: editP1S1 as number,
+      p2: editP2S1 as number,
+      complete: true,
+    };
+
+    if (!isBestOf3) {
+      const winnerSide: 'p1' | 'p2' = s1.p1 > s1.p2 ? 'p1' : 'p2';
+      const winnerId = winnerSide === 'p1' ? match.p1_id : match.p2_id;
+      const winnerType = winnerSide === 'p1' ? match.p1_type : match.p2_type;
+      return { newScoreSets: [s1], winnerId, winnerType };
+    }
+
+    // best_of_3x15
+    const s2Err = validateSetPair(editP1S2, editP2S2, target, 'Set 2');
+    if (s2Err) {
+      setEditValidationError(s2Err);
+      return null;
+    }
+    const s2: { p1: number; p2: number; complete: boolean } = {
+      p1: editP1S2 as number,
+      p2: editP2S2 as number,
+      complete: true,
+    };
+    const s1Winner: 'p1' | 'p2' = s1.p1 > s1.p2 ? 'p1' : 'p2';
+    const s2Winner: 'p1' | 'p2' = s2.p1 > s2.p2 ? 'p1' : 'p2';
+
+    if (s1Winner === s2Winner) {
+      // Match decided in two sets — set 3 not played.
+      const winnerId = s1Winner === 'p1' ? match.p1_id : match.p2_id;
+      const winnerType = s1Winner === 'p1' ? match.p1_type : match.p2_type;
+      return { newScoreSets: [s1, s2], winnerId, winnerType };
+    }
+
+    // 1–1 split — set 3 required.
+    const s3Err = validateSetPair(editP1S3, editP2S3, target, 'Set 3');
+    if (s3Err) {
+      setEditValidationError(s3Err);
+      return null;
+    }
+    const s3: { p1: number; p2: number; complete: boolean } = {
+      p1: editP1S3 as number,
+      p2: editP2S3 as number,
+      complete: true,
+    };
+    const s3Winner: 'p1' | 'p2' = s3.p1 > s3.p2 ? 'p1' : 'p2';
+    const winnerId = s3Winner === 'p1' ? match.p1_id : match.p2_id;
+    const winnerType = s3Winner === 'p1' ? match.p1_type : match.p2_type;
+    return { newScoreSets: [s1, s2, s3], winnerId, winnerType };
+  }
+
+  function handleSaveEdit() {
+    if (!match || !event || !p1 || !p2 || cascadeSubmitting) return;
+    setEditValidationError(null);
+    setCascadeError(null);
+
+    const payload = buildEditPayload();
+    if (!payload) return;
+
+    // Winner-path downstream slots are the only path the cascade RPC can
+    // re-resolve atomically (loser-path is a documented v1 limitation —
+    // see BACKEND_DESIGN.md change log).
+    const winnerDownstream = buildDownstreamForResult('winner');
+    const affected = winnerDownstream
+      .map((u) => {
+        const m = eventMatches.find((em) => em.id === u.match_id);
+        return m ? { id: m.id, label: m.bracket_slot } : null;
+      })
+      .filter((x): x is { id: string; label: string } => x !== null);
+
+    const downstreamMatchIds = affected.map((a) => a.id);
+
+    const cascadePayload = {
+      newScoreSets: payload.newScoreSets,
+      winnerId: payload.winnerId,
+      winnerType: payload.winnerType,
+      downstreamUpdates: winnerDownstream,
+      downstreamMatchIds,
+      affected,
+    };
+
+    if (affected.length === 0) {
+      // No downstream — apply directly with cascade=true (no modal needed).
+      void executeCascade(cascadePayload, true);
+      return;
+    }
+
+    setPendingCascade(cascadePayload);
+  }
+
+  async function executeCascade(
+    payload: NonNullable<typeof pendingCascade>,
+    cascade: boolean,
+  ) {
+    if (!match || cascadeSubmitting) return;
+    setCascadeError(null);
+    setCascadeSubmitting(true);
+    try {
+      const { error: rpcError } = await supabase.rpc('cascade_edit_match', {
+        p_match_id: match.id,
+        p_new_score_sets: payload.newScoreSets,
+        p_new_winner_id: payload.winnerId,
+        p_new_winner_type: payload.winnerType,
+        p_admin_name: adminName,
+        p_cascade: cascade,
+        p_downstream_match_ids: payload.downstreamMatchIds,
+        p_downstream_updates: payload.downstreamUpdates,
+      });
+      if (rpcError) {
+        const raw = rpcError.message ?? '';
+        const fallback = raw.startsWith('EVENT_PUBLISHED')
+          ? 'Unpublish the podium first to edit this match.'
+          : 'Could not save changes';
+        setCascadeError(rpcErrorMessage(raw, fallback));
+        return;
+      }
+      await fetchMatch();
+      setEditMode(false);
+      setPendingCascade(null);
+    } catch (caught) {
+      const msg = caught instanceof Error ? caught.message : 'Could not save changes';
+      setCascadeError(msg);
+    } finally {
+      setCascadeSubmitting(false);
+    }
+  }
+
   return (
     <div className="min-h-screen bg-navy text-white flex flex-col">
       <AdminHeader basePath={basePath} loginPath={loginPath} />
@@ -469,6 +688,14 @@ export default function ScoreEntryScreen({ basePath, loginPath }: ScoreEntryScre
                     ★ Handicap
                   </span>
                 )}
+                {match.inconsistent && (
+                  <span
+                    className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-body font-semibold bg-amber-warning/20 text-amber-warning"
+                    title="Flagged as inconsistent — review and cascade if needed"
+                  >
+                    ⚠ Inconsistent
+                  </span>
+                )}
               </div>
               <h1 className="font-display text-2xl text-gold-bright leading-tight">
                 {eventLabel(event, match)}
@@ -485,108 +712,170 @@ export default function ScoreEntryScreen({ basePath, loginPath }: ScoreEntryScre
               </div>
             )}
 
-            <SetEntrySection
-              key={`set-1-${set1?.id ?? 'new'}`}
-              setNumber={1}
-              target={target}
-              existingSet={set1}
-              matchId={match.id}
-              matchStatus={match.status}
-              p1Name={p1.name}
-              p2Name={p2.name}
-              canEditSet={canEditSet}
-              adminName={adminName}
-              onAfterSubmit={fetchMatch}
-            />
-
-            {isBestOf3 && set1?.complete && (
-              <SetEntrySection
-                key={`set-2-${set2?.id ?? 'new'}`}
-                setNumber={2}
+            {editMode ? (
+              <CascadeEditForm
                 target={target}
-                existingSet={set2}
-                matchId={match.id}
-                matchStatus={match.status}
+                isBestOf3={isBestOf3}
                 p1Name={p1.name}
                 p2Name={p2.name}
-                canEditSet={canEditSet}
-                adminName={adminName}
-                onAfterSubmit={fetchMatch}
+                p1S1={editP1S1}
+                p2S1={editP2S1}
+                p1S2={editP1S2}
+                p2S2={editP2S2}
+                p1S3={editP1S3}
+                p2S3={editP2S3}
+                onP1S1Change={(v) => {
+                  setEditP1S1(v);
+                  setEditValidationError(null);
+                }}
+                onP2S1Change={(v) => {
+                  setEditP2S1(v);
+                  setEditValidationError(null);
+                }}
+                onP1S2Change={(v) => {
+                  setEditP1S2(v);
+                  setEditValidationError(null);
+                }}
+                onP2S2Change={(v) => {
+                  setEditP2S2(v);
+                  setEditValidationError(null);
+                }}
+                onP1S3Change={(v) => {
+                  setEditP1S3(v);
+                  setEditValidationError(null);
+                }}
+                onP2S3Change={(v) => {
+                  setEditP2S3(v);
+                  setEditValidationError(null);
+                }}
+                validationError={editValidationError}
+                cascadeError={cascadeError}
+                submitting={cascadeSubmitting}
+                onSave={handleSaveEdit}
+                onCancel={handleCancelEdit}
               />
-            )}
+            ) : (
+              <>
+                <SetEntrySection
+                  key={`set-1-${set1?.id ?? 'new'}`}
+                  setNumber={1}
+                  target={target}
+                  existingSet={set1}
+                  matchId={match.id}
+                  matchStatus={match.status}
+                  p1Name={p1.name}
+                  p2Name={p2.name}
+                  canEditSet={canEditSet}
+                  adminName={adminName}
+                  onAfterSubmit={fetchMatch}
+                />
 
-            {showSet3 && (
-              <SetEntrySection
-                key={`set-3-${set3?.id ?? 'new'}`}
-                setNumber={3}
-                target={target}
-                existingSet={set3}
-                matchId={match.id}
-                matchStatus={match.status}
-                p1Name={p1.name}
-                p2Name={p2.name}
-                canEditSet={canEditSet}
-                adminName={adminName}
-                onAfterSubmit={fetchMatch}
-              />
-            )}
+                {isBestOf3 && set1?.complete && (
+                  <SetEntrySection
+                    key={`set-2-${set2?.id ?? 'new'}`}
+                    setNumber={2}
+                    target={target}
+                    existingSet={set2}
+                    matchId={match.id}
+                    matchStatus={match.status}
+                    p1Name={p1.name}
+                    p2Name={p2.name}
+                    canEditSet={canEditSet}
+                    adminName={adminName}
+                    onAfterSubmit={fetchMatch}
+                  />
+                )}
 
-            {completeError && (
-              <ErrorBanner
-                message={completeError}
-                onRetry={() => setCompleteError(null)}
-              />
-            )}
+                {showSet3 && (
+                  <SetEntrySection
+                    key={`set-3-${set3?.id ?? 'new'}`}
+                    setNumber={3}
+                    target={target}
+                    existingSet={set3}
+                    matchId={match.id}
+                    matchStatus={match.status}
+                    p1Name={p1.name}
+                    p2Name={p2.name}
+                    canEditSet={canEditSet}
+                    adminName={adminName}
+                    onAfterSubmit={fetchMatch}
+                  />
+                )}
 
-            <button
-              type="button"
-              onClick={() => {
-                setCompleteError(null);
-                setShowCompleteModal(true);
-              }}
-              disabled={!canMarkComplete}
-              className="w-full h-12 rounded-md bg-gold text-navy-dark font-body font-semibold tracking-wide uppercase text-sm transition disabled:bg-navy-light disabled:text-slate disabled:cursor-not-allowed hover:bg-gold-bright"
-            >
-              Mark Match Complete
-            </button>
+                {completeError && (
+                  <ErrorBanner
+                    message={completeError}
+                    onRetry={() => setCompleteError(null)}
+                  />
+                )}
 
-            {matchTerminal && (
-              <p className="text-center text-slate text-sm font-body mt-3">
-                Match {match.status}. {isTopAdmin ? 'Use Event Control to edit.' : 'Locked.'}
-              </p>
-            )}
+                {match.status === 'in_progress' && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCompleteError(null);
+                      setShowCompleteModal(true);
+                    }}
+                    disabled={!canMarkComplete}
+                    className="w-full h-12 rounded-md bg-gold text-navy-dark font-body font-semibold tracking-wide uppercase text-sm transition disabled:bg-navy-light disabled:text-slate disabled:cursor-not-allowed hover:bg-gold-bright"
+                  >
+                    Mark Match Complete
+                  </button>
+                )}
 
-            {demo && match.status === 'in_progress' && (
-              <div className="mt-4">
-                <button
-                  type="button"
-                  onClick={() => void handleSimulate()}
-                  disabled={simulating}
-                  className="w-full h-11 rounded-md border border-amber-warning/60 bg-amber-warning/10 text-amber-warning font-body text-xs uppercase tracking-wider hover:bg-amber-warning/20 transition disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {simulating ? 'Simulating…' : 'Simulate Match (demo)'}
-                </button>
-                {simulateError && (
-                  <div className="mt-3">
-                    <ErrorBanner
-                      message={simulateError}
-                      onRetry={() => void handleSimulate()}
-                    />
+                {canCascadeEdit && (
+                  <button
+                    type="button"
+                    onClick={handleStartEdit}
+                    className="w-full h-12 rounded-md border border-gold/60 bg-navy-light/40 text-gold-bright font-body font-semibold tracking-wide uppercase text-sm transition hover:bg-navy-light hover:border-gold"
+                  >
+                    Edit Result
+                  </button>
+                )}
+
+                {matchTerminal && !canCascadeEdit && (
+                  <p className="text-center text-slate text-sm font-body mt-3">
+                    Match {match.status}.{' '}
+                    {event?.status === 'published'
+                      ? 'Locked — unpublish the podium first.'
+                      : 'Locked.'}
+                  </p>
+                )}
+
+                {demo && match.status === 'in_progress' && (
+                  <div className="mt-4">
+                    <button
+                      type="button"
+                      onClick={() => void handleSimulate()}
+                      disabled={simulating}
+                      className="w-full h-11 rounded-md border border-amber-warning/60 bg-amber-warning/10 text-amber-warning font-body text-xs uppercase tracking-wider hover:bg-amber-warning/20 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {simulating ? 'Simulating…' : 'Simulate Match (demo)'}
+                    </button>
+                    {simulateError && (
+                      <div className="mt-3">
+                        <ErrorBanner
+                          message={simulateError}
+                          onRetry={() => void handleSimulate()}
+                        />
+                      </div>
+                    )}
                   </div>
                 )}
-              </div>
-            )}
 
-            <div className="text-center mt-6">
-              <button
-                type="button"
-                onClick={openRecordModal}
-                disabled={matchTerminal}
-                className="text-slate-light font-body text-sm hover:text-gold-bright underline-offset-4 hover:underline disabled:text-slate disabled:no-underline disabled:cursor-not-allowed"
-              >
-                Walkover / Retire
-              </button>
-            </div>
+                {match.status === 'in_progress' && (
+                  <div className="text-center mt-6">
+                    <button
+                      type="button"
+                      onClick={openRecordModal}
+                      className="text-slate-light font-body text-sm hover:text-gold-bright underline-offset-4 hover:underline"
+                    >
+                      Walkover / Retire
+                    </button>
+                  </div>
+                )}
+              </>
+            )}
           </>
         )}
       </main>
@@ -645,6 +934,21 @@ export default function ScoreEntryScreen({ basePath, loginPath }: ScoreEntryScre
           }}
         />
       )}
+
+      {pendingCascade && (
+        <CascadeChoiceModal
+          affected={pendingCascade.affected}
+          submitting={cascadeSubmitting}
+          error={cascadeError}
+          onCascade={() => void executeCascade(pendingCascade, true)}
+          onLeave={() => void executeCascade(pendingCascade, false)}
+          onCancel={() => {
+            if (cascadeSubmitting) return;
+            setPendingCascade(null);
+            setCascadeError(null);
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -681,8 +985,9 @@ function SetEntrySection({
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  // Only allow score-edit interactions while the parent match is editable.
-  const canSubmit = matchStatus === 'in_progress' || (canEditSet && matchStatus === 'complete');
+  // Only allow score-edit interactions while the parent match is in_progress.
+  // Completed-match edits go through the cascade-edit flow, not this component.
+  const canSubmit = matchStatus === 'in_progress' && canEditSet;
 
   function validateSet(p1Val: number | '', p2Val: number | ''): string | null {
     if (p1Val === '' || p2Val === '') {
@@ -1037,6 +1342,267 @@ function RecordOutcomeModal({
             className="px-4 py-2.5 rounded-md bg-amber-warning text-navy-dark font-body font-semibold transition-colors min-h-[44px] hover:bg-amber-warning/90 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {recording ? 'Saving…' : 'Confirm'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+interface CascadeEditFormProps {
+  target: number;
+  isBestOf3: boolean;
+  p1Name: string;
+  p2Name: string;
+  p1S1: number | '';
+  p2S1: number | '';
+  p1S2: number | '';
+  p2S2: number | '';
+  p1S3: number | '';
+  p2S3: number | '';
+  onP1S1Change: (v: number | '') => void;
+  onP2S1Change: (v: number | '') => void;
+  onP1S2Change: (v: number | '') => void;
+  onP2S2Change: (v: number | '') => void;
+  onP1S3Change: (v: number | '') => void;
+  onP2S3Change: (v: number | '') => void;
+  validationError: string | null;
+  cascadeError: string | null;
+  submitting: boolean;
+  onSave: () => void;
+  onCancel: () => void;
+}
+
+function CascadeEditForm({
+  target,
+  isBestOf3,
+  p1Name,
+  p2Name,
+  p1S1,
+  p2S1,
+  p1S2,
+  p2S2,
+  p1S3,
+  p2S3,
+  onP1S1Change,
+  onP2S1Change,
+  onP1S2Change,
+  onP2S2Change,
+  onP1S3Change,
+  onP2S3Change,
+  validationError,
+  cascadeError,
+  submitting,
+  onSave,
+  onCancel,
+}: CascadeEditFormProps) {
+  // Set 3 input is shown only when sets 1 and 2 split 1-1 in the current
+  // edits. Mirrors the in_progress flow's BR-013 behaviour.
+  const showSet3Input = useMemo(() => {
+    if (!isBestOf3) return false;
+    if (p1S1 === '' || p2S1 === '' || p1S2 === '' || p2S2 === '') return false;
+    const s1Winner = (p1S1 as number) > (p2S1 as number) ? 'p1' : 'p2';
+    const s2Winner = (p1S2 as number) > (p2S2 as number) ? 'p1' : 'p2';
+    return s1Winner !== s2Winner;
+  }, [isBestOf3, p1S1, p2S1, p1S2, p2S2]);
+
+  return (
+    <section className="rounded-lg bg-navy-light/60 border border-gold/40 p-4 mb-5">
+      <h2 className="font-body text-xs uppercase tracking-[0.2em] text-gold-bright mb-4">
+        Editing Result
+      </h2>
+
+      <div className="rounded-md bg-navy-light/60 border border-navy-light p-4 mb-3">
+        <p className="font-body text-xs uppercase tracking-[0.2em] text-slate mb-3">
+          Set 1 · First to {target}
+        </p>
+        <div className="grid grid-cols-2 gap-4">
+          <ScoreInput
+            value={p1S1}
+            onChange={onP1S1Change}
+            playerName={p1Name}
+            disabled={submitting}
+          />
+          <ScoreInput
+            value={p2S1}
+            onChange={onP2S1Change}
+            playerName={p2Name}
+            disabled={submitting}
+          />
+        </div>
+      </div>
+
+      {isBestOf3 && (
+        <div className="rounded-md bg-navy-light/60 border border-navy-light p-4 mb-3">
+          <p className="font-body text-xs uppercase tracking-[0.2em] text-slate mb-3">
+            Set 2 · First to {target}
+          </p>
+          <div className="grid grid-cols-2 gap-4">
+            <ScoreInput
+              value={p1S2}
+              onChange={onP1S2Change}
+              playerName={p1Name}
+              disabled={submitting}
+            />
+            <ScoreInput
+              value={p2S2}
+              onChange={onP2S2Change}
+              playerName={p2Name}
+              disabled={submitting}
+            />
+          </div>
+        </div>
+      )}
+
+      {showSet3Input && (
+        <div className="rounded-md bg-navy-light/60 border border-navy-light p-4 mb-3">
+          <p className="font-body text-xs uppercase tracking-[0.2em] text-slate mb-3">
+            Set 3 · First to {target}
+          </p>
+          <div className="grid grid-cols-2 gap-4">
+            <ScoreInput
+              value={p1S3}
+              onChange={onP1S3Change}
+              playerName={p1Name}
+              disabled={submitting}
+            />
+            <ScoreInput
+              value={p2S3}
+              onChange={onP2S3Change}
+              playerName={p2Name}
+              disabled={submitting}
+            />
+          </div>
+        </div>
+      )}
+
+      {validationError && (
+        <p role="alert" className="mt-2 mb-2 text-sm text-error font-body">
+          {validationError}
+        </p>
+      )}
+
+      {cascadeError && (
+        <div className="mt-2 mb-2">
+          <ErrorBanner message={cascadeError} onRetry={onSave} />
+        </div>
+      )}
+
+      <div className="flex flex-col-reverse sm:flex-row gap-3 mt-4">
+        <button
+          type="button"
+          onClick={onCancel}
+          disabled={submitting}
+          className="flex-1 h-11 rounded-md bg-navy-dark text-white font-body font-medium hover:bg-navy transition-colors disabled:opacity-50"
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          onClick={onSave}
+          disabled={submitting}
+          className="flex-1 h-11 rounded-md bg-gold text-navy-dark font-body font-semibold tracking-wide uppercase text-sm transition disabled:bg-navy-light disabled:text-slate disabled:cursor-not-allowed hover:bg-gold-bright"
+        >
+          {submitting ? 'Saving…' : 'Save Changes'}
+        </button>
+      </div>
+    </section>
+  );
+}
+
+interface CascadeChoiceModalProps {
+  affected: { id: string; label: string }[];
+  submitting: boolean;
+  error: string | null;
+  onCascade: () => void;
+  onLeave: () => void;
+  onCancel: () => void;
+}
+
+function CascadeChoiceModal({
+  affected,
+  submitting,
+  error,
+  onCascade,
+  onLeave,
+  onCancel,
+}: CascadeChoiceModalProps) {
+  useEffect(() => {
+    function handleKey(e: KeyboardEvent) {
+      if (e.key === 'Escape' && !submitting) onCancel();
+    }
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [onCancel, submitting]);
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="cascade-modal-title"
+      className="fixed inset-0 z-50 flex items-center justify-center px-4"
+    >
+      <div
+        className="absolute inset-0 bg-navy-dark/80 backdrop-blur-sm"
+        onClick={() => {
+          if (!submitting) onCancel();
+        }}
+        aria-hidden="true"
+      />
+      <div className="relative w-full max-w-md bg-navy-light border border-navy-light rounded-xl shadow-2xl p-6 animate-slide-up-fade">
+        <h2
+          id="cascade-modal-title"
+          className="font-display text-xl text-gold-bright mb-3"
+        >
+          Changing this result affects:
+        </h2>
+        <ul className="font-body text-sm text-white mb-4 space-y-1.5">
+          {affected.map((m) => (
+            <li
+              key={m.id}
+              className="flex items-center gap-2 px-3 py-2 rounded bg-navy-dark/40 border border-navy-dark"
+            >
+              <span className="text-slate text-xs uppercase tracking-wider">·</span>
+              <span>{m.label}</span>
+            </li>
+          ))}
+        </ul>
+
+        <p className="font-body text-xs text-slate mb-4">
+          Cascade resets these matches to ready and re-resolves them with the
+          new winner. Flag leaves them in place but marks them as inconsistent.
+        </p>
+
+        {error && (
+          <div className="mb-3">
+            <ErrorBanner message={error} onRetry={onCascade} />
+          </div>
+        )}
+
+        <div className="flex flex-col gap-2">
+          <button
+            type="button"
+            onClick={onCascade}
+            disabled={submitting}
+            className="w-full h-11 rounded-md bg-gold text-navy-dark font-body font-semibold transition hover:bg-gold-bright disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {submitting ? 'Saving…' : 'Cascade changes'}
+          </button>
+          <button
+            type="button"
+            onClick={onLeave}
+            disabled={submitting}
+            className="w-full h-11 rounded-md bg-amber-warning/90 text-navy-dark font-body font-semibold transition hover:bg-amber-warning disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Flag as inconsistent
+          </button>
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={submitting}
+            className="w-full h-11 rounded-md bg-navy-dark text-white font-body font-medium hover:bg-navy transition-colors disabled:opacity-50"
+          >
+            Cancel
           </button>
         </div>
       </div>

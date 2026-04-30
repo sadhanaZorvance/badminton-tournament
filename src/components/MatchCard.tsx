@@ -33,6 +33,7 @@ export default function MatchCard({
   const p1 = nameFor(match, 'p1', p1Name);
   const p2 = nameFor(match, 'p2', p2Name);
   const handicap = match.handicap_applied;
+  const inconsistent = match.inconsistent;
 
   const Wrapper = onClick ? 'button' : 'div';
   const wrapperProps = onClick
@@ -55,6 +56,14 @@ export default function MatchCard({
               <span className="text-xs font-body text-slate uppercase tracking-wider">
                 {eventLabel ?? roundLabel(match)}
               </span>
+              {inconsistent && (
+                <span
+                  className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-body font-semibold bg-amber-warning/20 text-amber-warning uppercase tracking-wider"
+                  title="Flagged as inconsistent — review and cascade if needed"
+                >
+                  ⚠ Inconsistent
+                </span>
+              )}
             </div>
             <span className="inline-flex items-center gap-1 text-[10px] font-body font-semibold text-emerald-300 uppercase tracking-wider">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
@@ -112,9 +121,19 @@ export default function MatchCard({
       <Wrapper {...wrapperProps}>
         <div className="rounded-lg bg-navy-light/60 border border-navy-light px-4 py-3 hover:bg-navy-light transition-colors">
           <div className="flex items-center justify-between mb-2 gap-2">
-            <span className="text-xs font-body text-slate uppercase tracking-wider truncate">
-              {eventLabel ?? roundLabel(match)}
-            </span>
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="text-xs font-body text-slate uppercase tracking-wider truncate">
+                {eventLabel ?? roundLabel(match)}
+              </span>
+              {inconsistent && (
+                <span
+                  className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-body font-semibold bg-amber-warning/20 text-amber-warning uppercase tracking-wider shrink-0"
+                  title="Flagged as inconsistent — review and cascade if needed"
+                >
+                  ⚠ Inconsistent
+                </span>
+              )}
+            </div>
             <FormatChip format={match.match_format} />
           </div>
           <div className="font-body text-white text-base">
@@ -139,6 +158,15 @@ export default function MatchCard({
         <span className="text-white truncate flex-1">
           {p1} <span className="text-slate">vs</span> {p2}
         </span>
+        {inconsistent && (
+          <span
+            className="text-amber-warning text-sm shrink-0"
+            title="Flagged as inconsistent — review and cascade if needed"
+            aria-label="Inconsistent"
+          >
+            ⚠
+          </span>
+        )}
         {match.court && <CourtBadge court={match.court} />}
       </div>
     </Wrapper>
