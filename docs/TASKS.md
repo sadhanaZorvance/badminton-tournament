@@ -25,8 +25,8 @@
 11 | COMPLETE | 2026-04-30 15:22 | E7 Handicap
 12 | COMPLETE | 2026-04-30 15:30 | Round Robin Standings Engine
 13 | COMPLETE | 2026-04-30 15:34 | E1 BLP Trigger
-14 | PENDING | | E1 Consolation Pool Generation
-15 | PENDING | | E8 Draw Form + Lock
+14 | COMPLETE | 2026-04-30 16:09 | E1 Consolation Pool Generation
+15 | FAILED | 2026-04-30 16:10 | E8 Draw Form + Lock
 16 | PENDING | | Demo Mode + Reset
 
 ## PHASE D — ADMIN POWER FEATURES
