@@ -1,6 +1,11 @@
+import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import logo from '../assets/logo.png';
 import { clearSession, getSession } from '../lib/auth';
+import { isDemoMode, withDemoQuery } from '../lib/demo';
+import { supabase } from '../lib/supabase';
+import ConfirmModal from './ConfirmModal';
+import ErrorBanner from './ErrorBanner';
 
 interface AdminHeaderProps {
   basePath: string;
@@ -21,15 +26,39 @@ export default function AdminHeader({
   const isTopAdmin = role === 'top_admin';
   const roleLabel = isTopAdmin ? 'Top Admin' : 'Court Admin';
 
+  const demo = isDemoMode();
+  const [showResetModal, setShowResetModal] = useState(false);
+  const [resetting, setResetting] = useState(false);
+  const [resetError, setResetError] = useState<string | null>(null);
+
   function handleSignOut() {
     clearSession();
     navigate(loginPath, { replace: true });
   }
 
+  async function handleConfirmReset() {
+    if (resetting) return;
+    setResetError(null);
+    setResetting(true);
+    try {
+      const { error: rpcError } = await supabase.rpc('reset_tournament');
+      if (rpcError) {
+        setResetError(rpcError.message || 'Reset failed');
+        return;
+      }
+      window.location.reload();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Reset failed';
+      setResetError(msg);
+    } finally {
+      setResetting(false);
+    }
+  }
+
   return (
     <header className="w-full bg-navy-dark border-b border-navy-light">
       <div className="max-w-5xl mx-auto px-4 py-3 flex items-center gap-3">
-        <Link to={`${basePath}/picker`} className="flex items-center gap-3">
+        <Link to={withDemoQuery(`${basePath}/picker`)} className="flex items-center gap-3">
           <img src={logo} alt="Leo Badminton Club" className="h-8 w-auto" />
           <span className="font-body text-slate text-sm hidden sm:inline">
             Leo Rising Stars 2026
@@ -43,13 +72,13 @@ export default function AdminHeader({
         {isTopAdmin && (
           <nav className="ml-4 hidden sm:flex items-center gap-4">
             <Link
-              to={`${basePath}/event-control`}
+              to={withDemoQuery(`${basePath}/event-control`)}
               className="text-slate hover:text-gold-bright text-sm font-body"
             >
               Event Control
             </Link>
             <Link
-              to={`${basePath}/champion-board`}
+              to={withDemoQuery(`${basePath}/champion-board`)}
               className="text-slate hover:text-gold-bright text-sm font-body"
             >
               Champion Board
@@ -62,6 +91,18 @@ export default function AdminHeader({
             <span className="text-slate text-sm font-body hidden sm:inline">
               {session.name}
             </span>
+          )}
+          {demo && (
+            <button
+              type="button"
+              onClick={() => {
+                setResetError(null);
+                setShowResetModal(true);
+              }}
+              className="px-2.5 py-1 rounded-md border border-error/60 bg-error/10 text-error font-body text-xs uppercase tracking-wider hover:bg-error/20 transition-colors"
+            >
+              Reset
+            </button>
           )}
           {onRefresh && (
             <button
@@ -96,6 +137,37 @@ export default function AdminHeader({
           </button>
         </div>
       </div>
+
+      {showResetModal && (
+        <ConfirmModal
+          title="Reset Tournament"
+          body={
+            <>
+              <p>
+                This will wipe all match data and reset the tournament to its
+                seeded starting state. Cannot be undone.
+              </p>
+              {resetError && (
+                <div className="mt-3">
+                  <ErrorBanner
+                    message={resetError}
+                    onRetry={() => void handleConfirmReset()}
+                  />
+                </div>
+              )}
+            </>
+          }
+          confirmLabel={resetting ? 'Resetting…' : 'Reset Tournament'}
+          cancelLabel="Cancel"
+          variant="destructive"
+          onConfirm={() => void handleConfirmReset()}
+          onCancel={() => {
+            if (resetting) return;
+            setShowResetModal(false);
+            setResetError(null);
+          }}
+        />
+      )}
     </header>
   );
 }

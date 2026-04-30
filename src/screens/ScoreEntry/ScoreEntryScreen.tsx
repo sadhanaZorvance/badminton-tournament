@@ -9,6 +9,7 @@ import LoadingSkeleton from '../../components/LoadingSkeleton';
 import ScoreInput from '../../components/ScoreInput';
 import { getSession } from '../../lib/auth';
 import { getDownstreamSlots } from '../../lib/bracketWiring';
+import { isDemoMode, runSimulatedMatch, withDemoQuery } from '../../lib/demo';
 import { supabase } from '../../lib/supabase';
 import type {
   EntrantType,
@@ -112,6 +113,11 @@ export default function ScoreEntryScreen({ basePath, loginPath }: ScoreEntryScre
   const [retP2, setRetP2] = useState<number | ''>('');
   const [recording, setRecording] = useState(false);
   const [recordError, setRecordError] = useState<string | null>(null);
+
+  // Demo mode
+  const demo = isDemoMode();
+  const [simulating, setSimulating] = useState(false);
+  const [simulateError, setSimulateError] = useState<string | null>(null);
 
   const fetchMatch = useCallback(async (): Promise<void> => {
     if (!matchId) throw new Error('No match id in URL');
@@ -317,12 +323,27 @@ export default function ScoreEntryScreen({ basePath, loginPath }: ScoreEntryScre
         setCompleteError(rpcErrorMessage(rpcError.message, 'Could not complete match'));
         return;
       }
-      navigate(`${basePath}/picker`);
+      navigate(withDemoQuery(`${basePath}/picker`));
     } catch (caught) {
       const msg = caught instanceof Error ? caught.message : 'Could not complete match';
       setCompleteError(msg);
     } finally {
       setCompleting(false);
+    }
+  }
+
+  async function handleSimulate() {
+    if (!match || !event || simulating) return;
+    setSimulateError(null);
+    setSimulating(true);
+    try {
+      await runSimulatedMatch({ match, eventCode: event.code, adminName });
+      navigate(withDemoQuery(`${basePath}/picker`));
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Simulation failed';
+      setSimulateError(msg);
+    } finally {
+      setSimulating(false);
     }
   }
 
@@ -392,7 +413,7 @@ export default function ScoreEntryScreen({ basePath, loginPath }: ScoreEntryScre
           return;
         }
       }
-      navigate(`${basePath}/picker`);
+      navigate(withDemoQuery(`${basePath}/picker`));
     } catch (caught) {
       const msg = caught instanceof Error ? caught.message : 'Could not record outcome';
       setRecordError(msg);
@@ -408,7 +429,7 @@ export default function ScoreEntryScreen({ basePath, loginPath }: ScoreEntryScre
       <main className="flex-1 max-w-3xl w-full mx-auto px-4 py-6">
         <button
           type="button"
-          onClick={() => navigate(`${basePath}/picker`)}
+          onClick={() => navigate(withDemoQuery(`${basePath}/picker`))}
           className="inline-flex items-center gap-1 text-slate hover:text-gold-bright font-body text-sm mb-4 -ml-1 px-1 py-1"
           aria-label="Back to Match Picker"
         >
@@ -533,6 +554,27 @@ export default function ScoreEntryScreen({ basePath, loginPath }: ScoreEntryScre
               <p className="text-center text-slate text-sm font-body mt-3">
                 Match {match.status}. {isTopAdmin ? 'Use Event Control to edit.' : 'Locked.'}
               </p>
+            )}
+
+            {demo && match.status === 'in_progress' && (
+              <div className="mt-4">
+                <button
+                  type="button"
+                  onClick={() => void handleSimulate()}
+                  disabled={simulating}
+                  className="w-full h-11 rounded-md border border-amber-warning/60 bg-amber-warning/10 text-amber-warning font-body text-xs uppercase tracking-wider hover:bg-amber-warning/20 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {simulating ? 'Simulating…' : 'Simulate Match (demo)'}
+                </button>
+                {simulateError && (
+                  <div className="mt-3">
+                    <ErrorBanner
+                      message={simulateError}
+                      onRetry={() => void handleSimulate()}
+                    />
+                  </div>
+                )}
+              </div>
             )}
 
             <div className="text-center mt-6">
