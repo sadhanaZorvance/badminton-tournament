@@ -9,7 +9,7 @@
 
 ## PHASE A — FOUNDATION
 01 | COMPLETE | 2026-04-30 14:09 | Project Scaffold + Environment
-02 | PENDING | | Supabase Schema + Seed Data
+02 | COMPLETE | 2026-04-30 14:24 | Supabase Schema + Seed Data
 03 | PENDING | | Bracket Wiring Config
 04 | PENDING | | Auth System
 05 | PENDING | | Global UI Shell + Design System
