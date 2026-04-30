@@ -10,10 +10,36 @@
   }
 
   body {
-    background-color: theme('colors.navy.DEFAULT');
-    color: theme('colors.white');
-    font-family: theme('fontFamily.body');
+    font-family: 'DM Sans', sans-serif;
+    background: #0E1B2E;
+    color: white;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+  }
+
+  .font-display {
+    font-family: 'Cinzel', serif;
+  }
+}
+
+@layer utilities {
+  .skeleton-shimmer {
+    background: linear-gradient(
+      90deg,
+      #162436 0%,
+      #1A2A40 50%,
+      #162436 100%
+    );
+    background-size: 200% 100%;
+    animation: skeleton-shimmer 1.4s ease-in-out infinite;
+  }
+
+  @keyframes skeleton-shimmer {
+    0% {
+      background-position: 200% 0;
+    }
+    100% {
+      background-position: -200% 0;
+    }
   }
 }
