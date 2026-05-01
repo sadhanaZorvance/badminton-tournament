@@ -100,8 +100,6 @@ export default function ScoreEntryScreen({ basePath, loginPath }: ScoreEntryScre
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
-  // Mark Complete modal
-  const [showCompleteModal, setShowCompleteModal] = useState(false);
   const [completing, setCompleting] = useState(false);
   const [completeError, setCompleteError] = useState<string | null>(null);
 
@@ -337,7 +335,7 @@ export default function ScoreEntryScreen({ basePath, loginPath }: ScoreEntryScre
     return updates;
   }
 
-  async function handleConfirmComplete() {
+  async function handleCompleteMatch() {
     if (!match || !matchWinner || completing) return;
     setCompleteError(null);
     setCompleting(true);
@@ -832,25 +830,31 @@ export default function ScoreEntryScreen({ basePath, loginPath }: ScoreEntryScre
                   />
                 )}
 
-                {completeError && (
-                  <ErrorBanner
-                    message={completeError}
-                    onRetry={() => setCompleteError(null)}
-                  />
-                )}
-
                 {match.status === 'in_progress' && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setCompleteError(null);
-                      setShowCompleteModal(true);
-                    }}
-                    disabled={!canMarkComplete}
-                    className="w-full h-12 rounded-md bg-gold text-navy-dark font-body font-semibold tracking-wide uppercase text-sm transition disabled:bg-navy-light disabled:text-slate disabled:cursor-not-allowed hover:bg-gold-bright"
-                  >
-                    Mark Match Complete
-                  </button>
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCompleteError(null);
+                        void handleCompleteMatch();
+                      }}
+                      disabled={!canMarkComplete || completing}
+                      className="w-full h-12 rounded-md bg-gold text-navy-dark font-body font-semibold tracking-wide uppercase text-sm transition disabled:bg-navy-light disabled:text-slate disabled:cursor-not-allowed hover:bg-gold-bright"
+                    >
+                      {completing ? 'Completing…' : 'Mark Match Complete'}
+                    </button>
+                    {completeError && (
+                      <div className="mt-2">
+                        <ErrorBanner
+                          message={completeError}
+                          onRetry={() => {
+                            setCompleteError(null);
+                            void handleCompleteMatch();
+                          }}
+                        />
+                      </div>
+                    )}
+                  </>
                 )}
 
                 {canCascadeEdit && (
@@ -923,36 +927,6 @@ export default function ScoreEntryScreen({ basePath, loginPath }: ScoreEntryScre
           </>
         )}
       </main>
-
-      {showCompleteModal && matchWinner && (
-        <ConfirmModal
-          title={`${matchWinner.name} wins`}
-          body={
-            <>
-              <p className="font-display text-xl text-gold-bright tabular-nums mb-2">
-                {matchWinner.scoresText}
-              </p>
-              <p>This will lock the match and advance the bracket.</p>
-              {completeError && (
-                <div className="mt-3">
-                  <ErrorBanner
-                    message={completeError}
-                    onRetry={() => void handleConfirmComplete()}
-                  />
-                </div>
-              )}
-            </>
-          }
-          confirmLabel={completing ? 'Completing…' : 'Confirm'}
-          cancelLabel="Cancel"
-          onConfirm={() => void handleConfirmComplete()}
-          onCancel={() => {
-            if (completing) return;
-            setShowCompleteModal(false);
-            setCompleteError(null);
-          }}
-        />
-      )}
 
       {showRecordModal && match && p1 && p2 && (
         <RecordOutcomeModal
@@ -1047,16 +1021,14 @@ function SetEntrySection({
   adminName,
   onAfterSubmit,
 }: SetEntrySectionProps) {
-  const [editing, setEditing] = useState(!existingSet || !existingSet.complete);
   const [p1Input, setP1Input] = useState<number | ''>(existingSet?.p1_score ?? '');
   const [p2Input, setP2Input] = useState<number | ''>(existingSet?.p2_score ?? '');
   const [validationError, setValidationError] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  // Only allow score-edit interactions while the parent match is in_progress.
-  // Completed-match edits go through the cascade-edit flow, not this component.
   const canSubmit = matchStatus === 'in_progress' && canEditSet;
+  const saved = existingSet?.complete ?? false;
 
   function validateSet(p1Val: number | '', p2Val: number | ''): string | null {
     if (p1Val === '' || p2Val === '') {
@@ -1065,26 +1037,13 @@ function SetEntrySection({
     if (p1Val < 0 || p2Val < 0) return 'Scores cannot be negative.';
     const p1IsTarget = p1Val === target;
     const p2IsTarget = p2Val === target;
-    if (p1IsTarget && p2IsTarget) {
-      return `Only one player can reach ${target}.`;
-    }
-    if (!p1IsTarget && !p2IsTarget) {
-      return `One player must reach ${target}. Other must be lower.`;
-    }
+    if (p1IsTarget && p2IsTarget) return `Only one player can reach ${target}.`;
+    if (!p1IsTarget && !p2IsTarget) return `One player must reach ${target}. Other must be lower.`;
     const other = p1IsTarget ? p2Val : p1Val;
     if (other < 0 || other > target - 1) {
       return `One player must reach ${target}. Other must be 0 to ${target - 1}.`;
     }
     return null;
-  }
-
-  function handleStartEdit() {
-    if (!existingSet) return;
-    setP1Input(existingSet.p1_score);
-    setP2Input(existingSet.p2_score);
-    setEditing(true);
-    setValidationError(null);
-    setSubmitError(null);
   }
 
   async function handleSubmit() {
@@ -1096,15 +1055,13 @@ function SetEntrySection({
       setValidationError(err);
       return;
     }
-    const p1Val = p1Input as number;
-    const p2Val = p2Input as number;
     setSubmitting(true);
     try {
       const { error: rpcError } = await supabase.rpc('submit_set', {
         p_match_id: matchId,
         p_set_number: setNumber,
-        p_p1_score: p1Val,
-        p_p2_score: p2Val,
+        p_p1_score: p1Input as number,
+        p_p2_score: p2Input as number,
         p_admin_name: adminName,
       });
       if (rpcError) {
@@ -1112,7 +1069,6 @@ function SetEntrySection({
         return;
       }
       await onAfterSubmit();
-      setEditing(false);
     } catch (caught) {
       const msg = caught instanceof Error ? caught.message : 'Score could not be saved';
       setSubmitError(msg);
@@ -1127,92 +1083,47 @@ function SetEntrySection({
         <h2 className="font-body text-xs uppercase tracking-[0.2em] text-slate">
           Set {setNumber} · First to {target}
         </h2>
-        {existingSet?.complete && !editing && canEditSet && (
-          <button
-            type="button"
-            onClick={handleStartEdit}
-            className="text-gold-bright hover:text-gold text-sm font-body underline-offset-4 hover:underline px-1 py-1"
-          >
-            Edit
-          </button>
+        {saved && (
+          <span className="text-xs font-body font-semibold text-emerald-400">✓ Saved</span>
         )}
       </div>
 
-      {editing ? (
-        <>
-          <div className="grid grid-cols-2 gap-4 items-end">
-            <ScoreInput
-              value={p1Input}
-              onChange={(v) => {
-                setP1Input(v);
-                setValidationError(null);
-              }}
-              playerName={p1Name}
-              disabled={submitting}
-            />
-            <ScoreInput
-              value={p2Input}
-              onChange={(v) => {
-                setP2Input(v);
-                setValidationError(null);
-              }}
-              playerName={p2Name}
-              disabled={submitting}
-            />
-          </div>
+      <div className="grid grid-cols-2 gap-4 items-end">
+        <ScoreInput
+          value={p1Input}
+          onChange={(v) => { setP1Input(v); setValidationError(null); }}
+          playerName={p1Name}
+          disabled={!canSubmit || submitting}
+        />
+        <ScoreInput
+          value={p2Input}
+          onChange={(v) => { setP2Input(v); setValidationError(null); }}
+          playerName={p2Name}
+          disabled={!canSubmit || submitting}
+        />
+      </div>
 
-          {validationError && (
-            <p
-              role="alert"
-              className="mt-3 text-sm text-error font-body"
-            >
-              {validationError}
-            </p>
-          )}
-
-          <button
-            type="button"
-            onClick={() => void handleSubmit()}
-            disabled={submitting || !canSubmit}
-            className="mt-4 w-full h-11 rounded-md bg-gold text-navy-dark font-body font-semibold tracking-wide uppercase text-sm transition disabled:bg-navy-light disabled:text-slate disabled:cursor-not-allowed hover:bg-gold-bright"
-          >
-            {submitting ? 'Saving…' : 'Submit Set'}
-          </button>
-
-          {submitError && (
-            <div className="mt-3">
-              <ErrorBanner
-                message={submitError}
-                onRetry={() => void handleSubmit()}
-              />
-            </div>
-          )}
-        </>
-      ) : existingSet ? (
-        <div className="flex items-center justify-between gap-4">
-          <div className="flex-1 grid grid-cols-2 gap-4">
-            <div className="text-center">
-              <p className="font-body text-xs text-slate uppercase tracking-wider mb-1">
-                {p1Name}
-              </p>
-              <p className="font-display text-3xl text-white tabular-nums">
-                {existingSet.p1_score}
-              </p>
-            </div>
-            <div className="text-center">
-              <p className="font-body text-xs text-slate uppercase tracking-wider mb-1">
-                {p2Name}
-              </p>
-              <p className="font-display text-3xl text-white tabular-nums">
-                {existingSet.p2_score}
-              </p>
-            </div>
-          </div>
-        </div>
-      ) : (
-        <p className="text-slate font-body text-sm">
-          Enter Set {setNumber} scores to begin.
+      {validationError && (
+        <p role="alert" className="mt-3 text-sm text-error font-body">
+          {validationError}
         </p>
+      )}
+
+      {canSubmit && (
+        <button
+          type="button"
+          onClick={() => void handleSubmit()}
+          disabled={submitting}
+          className="mt-4 w-full h-11 rounded-md bg-gold text-navy-dark font-body font-semibold tracking-wide uppercase text-sm transition disabled:bg-navy-light disabled:text-slate disabled:cursor-not-allowed hover:bg-gold-bright"
+        >
+          {submitting ? 'Saving…' : saved ? 'Update Score' : 'Save Set'}
+        </button>
+      )}
+
+      {submitError && (
+        <div className="mt-3">
+          <ErrorBanner message={submitError} onRetry={() => void handleSubmit()} />
+        </div>
       )}
     </section>
   );

@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import AdminHeader from '../../components/AdminHeader';
-import ConfirmModal from '../../components/ConfirmModal';
 import ErrorBanner from '../../components/ErrorBanner';
 import LoadingSkeleton from '../../components/LoadingSkeleton';
 import MatchCard from '../../components/MatchCard';
@@ -71,11 +70,6 @@ export default function MatchPickerScreen({ basePath, loginPath }: MatchPickerSc
   const [selectedCourt, setSelectedCourt] = useState<CourtFilter>('All');
   const [searchQuery, setSearchQuery] = useState('');
 
-  const [pendingStart, setPendingStart] = useState<{
-    match: Match;
-    court: Exclude<CourtFilter, 'All'>;
-    occupiedBy: Match | null;
-  } | null>(null);
   const [starting, setStarting] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
 
@@ -216,18 +210,17 @@ export default function MatchPickerScreen({ basePath, loginPath }: MatchPickerSc
     navigate(withDemoQuery(`${basePath}/score/${match.id}`));
   }
 
-  function handleStartTap(match: Match) {
-    if (selectedCourt === 'All') return;
-    const court = selectedCourt;
-    const occupiedBy = courtOccupancy.get(court) ?? null;
-    if (occupiedBy && occupiedBy.id !== match.id) {
-      setPendingStart({ match, court, occupiedBy });
-      return;
-    }
-    void doStart(match, court);
+  function autoAssignCourt(): string {
+    if (selectedCourt !== 'All') return selectedCourt;
+    const courts: CourtFilter[] = ['C1', 'C2', 'C3', 'C4', 'C5'];
+    return courts.find((c) => !courtOccupancy.has(c)) ?? 'C1';
   }
 
-  async function doStart(match: Match, court: Exclude<CourtFilter, 'All'>) {
+  function handleStartTap(match: Match) {
+    void doStart(match, autoAssignCourt());
+  }
+
+  async function doStart(match: Match, court: string) {
     setStarting(true);
     try {
       const { error: rpcError } = await supabase.rpc('start_match', {
@@ -251,13 +244,7 @@ export default function MatchPickerScreen({ basePath, loginPath }: MatchPickerSc
       setError(message);
     } finally {
       setStarting(false);
-      setPendingStart(null);
     }
-  }
-
-  function handleConfirmOccupiedStart() {
-    if (!pendingStart) return;
-    void doStart(pendingStart.match, pendingStart.court);
   }
 
   async function handleSimulate(match: Match) {
@@ -279,18 +266,6 @@ export default function MatchPickerScreen({ basePath, loginPath }: MatchPickerSc
       setSimulatingId(null);
     }
   }
-
-  const occupiedMatchLabel = pendingStart?.occupiedBy
-    ? `${eventLabel(pendingStart.occupiedBy)} (${nameFor(
-        pendingStart.occupiedBy.p1_id,
-        pendingStart.occupiedBy.p1_type,
-        pendingStart.occupiedBy.p1_ref,
-      )} vs ${nameFor(
-        pendingStart.occupiedBy.p2_id,
-        pendingStart.occupiedBy.p2_type,
-        pendingStart.occupiedBy.p2_ref,
-      )})`
-    : '';
 
   return (
     <div className="min-h-screen bg-navy text-white flex flex-col">
@@ -435,11 +410,7 @@ export default function MatchPickerScreen({ basePath, loginPath }: MatchPickerSc
                   {filteredReadyMatches.map((match) => {
                     const p1 = nameFor(match.p1_id, match.p1_type, match.p1_ref);
                     const p2 = nameFor(match.p2_id, match.p2_type, match.p2_ref);
-                    const startDisabled = selectedCourt === 'All' || starting;
-                    const startLabel =
-                      selectedCourt === 'All'
-                        ? 'Pick a court first'
-                        : `Start on ${selectedCourt}`;
+                    const startDisabled = starting;
                     return (
                       <div
                         key={match.id}
@@ -478,7 +449,7 @@ export default function MatchPickerScreen({ basePath, loginPath }: MatchPickerSc
                           onClick={() => handleStartTap(match)}
                           className="w-full h-11 rounded-md bg-gold text-navy-dark font-body font-semibold tracking-wide uppercase text-sm transition disabled:bg-navy-light disabled:text-slate disabled:cursor-not-allowed hover:bg-gold-bright"
                         >
-                          {startLabel}
+                          {starting ? 'Starting…' : 'Start Match'}
                         </button>
                       </div>
                     );
@@ -495,24 +466,6 @@ export default function MatchPickerScreen({ basePath, loginPath }: MatchPickerSc
           </p>
         )}
       </main>
-
-      {pendingStart && (
-        <ConfirmModal
-          title={`Court ${pendingStart.court} occupied`}
-          body={
-            <>
-              Court {pendingStart.court} has{' '}
-              <span className="text-white">{occupiedMatchLabel}</span> in progress.
-              Start the new match anyway?
-            </>
-          }
-          confirmLabel={starting ? 'Starting…' : 'Start anyway'}
-          cancelLabel="Cancel"
-          onConfirm={handleConfirmOccupiedStart}
-          onCancel={() => setPendingStart(null)}
-          variant="destructive"
-        />
-      )}
 
       {toast && (
         <Toast message={toast} onDismiss={() => setToast(null)} />
