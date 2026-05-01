@@ -378,8 +378,8 @@ export default function ScoreEntryScreen({ basePath, loginPath }: ScoreEntryScre
       if (updateError) throw updateError;
       await supabase.from('audit_log').insert({
         match_id: match.id,
-        action: 'match_released',
-        actor: adminName,
+        action_type: 'match_released',
+        actor_name: adminName,
         payload: { reason: 'wrong_match_started' },
       });
       navigate(withDemoQuery(`${basePath}/picker`));
