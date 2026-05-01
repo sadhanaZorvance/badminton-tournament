@@ -1,21 +1,19 @@
 /**
  * seed-teams.js
  *
- * Seeds the `teams` table for E4, E5, E8 and generates all R1/RR matches
+ * Seeds the `teams` table for E2, E5, E8 and generates all R1/RR matches
  * for those events (plus pending downstream matches: SF, F, 3P, ConRR, ConF).
  *
- * Re-runnable: upserts on `code` for teams. For matches, deletes existing
- * matches for E4/E5/E8 before re-inserting (idempotent re-runs).
+ * Re-runnable: for matches, deletes existing matches for E2/E5/E8 before
+ * re-inserting (idempotent re-runs).
  *
  * Pre-requisites:
- *   - players table seeded (38 players + TBD)
- *   - events table seeded (E1–E8)
+ *   - players table seeded (seed-players.js)
+ *   - events table seeded (seed-events.js)
  *   - SUPABASE_SERVICE_ROLE_KEY and VITE_SUPABASE_URL in env
  *
  * Run:
- *   $env:SUPABASE_SERVICE_ROLE_KEY = "..."
- *   $env:VITE_SUPABASE_URL = "..."
- *   node scripts/seed-teams.js
+ *   node --env-file=.env.local scripts/seed-teams.js
  */
 
 import { createClient } from '@supabase/supabase-js';
@@ -37,14 +35,14 @@ const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
 // ─── TEAMS DATA ─────────────────────────────────────────────────────────────
 
 /**
- * Order matters for E4 and E5: index 0 (T1) gets the bye.
+ * Order matters for E2 and E5: index 0 (T1) gets the bye.
  * Pairings for R1 are derived from the remaining indices in order:
  *   R1.1: teams[1] vs teams[2]
  *   R1.2: teams[3] vs teams[4]
  *   R1.3: teams[5] vs teams[6]
  */
 const TEAMS = {
-  E4: [
+  E2: [
     { code: 'T1-U11-B', p1: 'P6-U11-B',  p2: 'P14-U11-B' }, // BYE
     { code: 'T2-U11-B', p1: 'P9-U11-B',  p2: 'P4-U11-B'  },
     { code: 'T3-U11-B', p1: 'P7-U11-B',  p2: 'P8-U11-B'  },
@@ -74,8 +72,8 @@ const TEAMS = {
 // ─── EVENT MATCH-FORMAT MATRIX ──────────────────────────────────────────────
 
 const FORMATS = {
-  E4: { R1: 'set21', SF: 'set30',        F: 'best_of_3x15', '3P': 'set30',        ConRR: 'set21', ConF: 'set30' },
-  E5: { R1: 'set21', SF: 'set30',        F: 'best_of_3x15', '3P': 'set30',        ConRR: 'set21', ConF: 'set30' },
+  E2: { R1: 'set21', SF: 'set30', F: 'best_of_3x15', '3P': 'set30', ConRR: 'set21', ConF: 'set30' },
+  E5: { R1: 'set21', SF: 'set30', F: 'best_of_3x15', '3P': 'set30', ConRR: 'set21', ConF: 'set30' },
   E8: { RR: 'set21', F: 'best_of_3x15', '3P': 'set30' },
 };
 
@@ -95,12 +93,12 @@ async function fetchEventMap() {
   const { data, error } = await supabase
     .from('events')
     .select('id, code')
-    .in('code', ['E4', 'E5', 'E8']);
+    .in('code', ['E2', 'E5', 'E8']);
   if (error) throw new Error(`fetchEventMap: ${error.message}`);
   const map = new Map();
   for (const e of data) map.set(e.code, e.id);
   if (map.size !== 3) {
-    throw new Error(`Expected 3 events (E4, E5, E8), got ${map.size}`);
+    throw new Error(`Expected 3 events (E2, E5, E8), got ${map.size}`);
   }
   return map;
 }
@@ -115,7 +113,7 @@ async function fetchEventMap() {
  *
  * The `code` field exists only in this script (TEAMS array) as a stable
  * handle for building the bracket. We map it to the returned UUID by
- * insertion order, since Supabase preserves order in batch inserts.
+ * matching player1+player2 IDs in the inserted rows.
  */
 async function upsertTeams(eventCode, eventId, playerMap) {
   const teamDefs = TEAMS[eventCode];
@@ -183,7 +181,7 @@ async function insertMatches(eventCode, rows) {
 // ─── MATCH BUILDERS ─────────────────────────────────────────────────────────
 
 /**
- * E4 / E5 — 7 teams, T1 bye, knockout + 3-team consolation.
+ * E2 / E5 — 7 teams, T1 bye, knockout + 3-team consolation.
  *
  * Bracket structure:
  *   BYE     — T1 auto-complete, advances to SF1.p1
@@ -194,9 +192,9 @@ async function insertMatches(eventCode, rows) {
  *   SF2     — Winner:R1.2 vs Winner:R1.3
  *   F       — Winner:SF1 vs Winner:SF2
  *   3P      — Loser:SF1 vs Loser:SF2
- *   ConRR.1 — ConRR.slot1 vs ConRR.slot2
- *   ConRR.2 — ConRR.slot1 vs ConRR.slot3
- *   ConRR.3 — ConRR.slot2 vs ConRR.slot3
+ *   ConRR.1 — Loser:R1.1 vs Loser:R1.2
+ *   ConRR.2 — Loser:R1.1 vs Loser:R1.3
+ *   ConRR.3 — Loser:R1.2 vs Loser:R1.3
  *   ConF    — Top1:ConRR vs Top2:ConRR
  */
 function buildHybrid7Matches(eventCode, eventId, teamMap) {
@@ -226,6 +224,9 @@ function buildHybrid7Matches(eventCode, eventId, teamMap) {
     match_format: fmt.R1,
     status: 'complete',
     handicap_applied: false,
+    score_sets: [],
+    inconsistent: false,
+    edit_history: [],
     completed_at: new Date().toISOString(),
   });
 
@@ -245,6 +246,9 @@ function buildHybrid7Matches(eventCode, eventId, teamMap) {
       match_format: fmt.R1,
       status: 'ready',
       handicap_applied: false,
+      score_sets: [],
+      inconsistent: false,
+      edit_history: [],
     });
   });
 
@@ -262,6 +266,9 @@ function buildHybrid7Matches(eventCode, eventId, teamMap) {
     match_format: fmt.SF,
     status: 'pending',
     handicap_applied: false,
+    score_sets: [],
+    inconsistent: false,
+    edit_history: [],
   });
 
   // SF2 — Winner:R1.2 vs Winner:R1.3
@@ -278,6 +285,9 @@ function buildHybrid7Matches(eventCode, eventId, teamMap) {
     match_format: fmt.SF,
     status: 'pending',
     handicap_applied: false,
+    score_sets: [],
+    inconsistent: false,
+    edit_history: [],
   });
 
   // F — Winner:SF1 vs Winner:SF2
@@ -294,6 +304,9 @@ function buildHybrid7Matches(eventCode, eventId, teamMap) {
     match_format: fmt.F,
     status: 'pending',
     handicap_applied: false,
+    score_sets: [],
+    inconsistent: false,
+    edit_history: [],
   });
 
   // 3P — Loser:SF1 vs Loser:SF2
@@ -310,10 +323,12 @@ function buildHybrid7Matches(eventCode, eventId, teamMap) {
     match_format: fmt['3P'],
     status: 'pending',
     handicap_applied: false,
+    score_sets: [],
+    inconsistent: false,
+    edit_history: [],
   });
 
   // ConRR.1 / ConRR.2 / ConRR.3 — round robin between 3 R1 losers
-  // Slot mapping: ConRR.slot1=Loser:R1.1, slot2=Loser:R1.2, slot3=Loser:R1.3
   const conPairs = [
     ['Loser:R1.1', 'Loser:R1.2'],
     ['Loser:R1.1', 'Loser:R1.3'],
@@ -333,6 +348,9 @@ function buildHybrid7Matches(eventCode, eventId, teamMap) {
       match_format: fmt.ConRR,
       status: 'pending',
       handicap_applied: false,
+      score_sets: [],
+      inconsistent: false,
+      edit_history: [],
     });
   });
 
@@ -350,6 +368,9 @@ function buildHybrid7Matches(eventCode, eventId, teamMap) {
     match_format: fmt.ConF,
     status: 'pending',
     handicap_applied: false,
+    score_sets: [],
+    inconsistent: false,
+    edit_history: [],
   });
 
   return rows;
@@ -383,6 +404,9 @@ function buildE8Matches(eventId, teamMap) {
         match_format: fmt.RR,
         status: 'ready',
         handicap_applied: false,
+        score_sets: [],
+        inconsistent: false,
+        edit_history: [],
       });
       n++;
     }
@@ -402,6 +426,9 @@ function buildE8Matches(eventId, teamMap) {
     match_format: fmt.F,
     status: 'pending',
     handicap_applied: false,
+    score_sets: [],
+    inconsistent: false,
+    edit_history: [],
   });
 
   // 3P — Top3 vs Top4 (resolved after RR completes)
@@ -418,6 +445,9 @@ function buildE8Matches(eventId, teamMap) {
     match_format: fmt['3P'],
     status: 'pending',
     handicap_applied: false,
+    score_sets: [],
+    inconsistent: false,
+    edit_history: [],
   });
 
   return rows;
@@ -438,7 +468,7 @@ async function main() {
   const summary = [];
 
   // 2. Process each event
-  for (const eventCode of ['E4', 'E5', 'E8']) {
+  for (const eventCode of ['E2', 'E5', 'E8']) {
     console.log(`\n━━━ ${eventCode} ━━━`);
     const eventId = eventMap.get(eventCode);
 

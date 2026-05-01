@@ -29,13 +29,13 @@ const supabase = createClient(SUPABASE_URL, SERVICE_KEY, {
 // depends_on uses event codes here; resolved to UUIDs after first upsert pass.
 const events = [
   { code: 'E1', name: 'U11 Boys Singles',     format_type: 'knockout', gender: 'M',     age_group: 'U11',   court_pool: 'boys',  depends_on_codes: [],            handicap_rule: null,        status: 'active'  },
-  { code: 'E2', name: 'U11 Girls Singles',    format_type: 'knockout', gender: 'F',     age_group: 'U11',   court_pool: 'girls', depends_on_codes: ['E1'],        handicap_rule: null,        status: 'pending' },
-  { code: 'E3', name: 'U13 Boys Singles',     format_type: 'knockout', gender: 'M',     age_group: 'U13',   court_pool: 'boys',  depends_on_codes: [],            handicap_rule: null,        status: 'pending' },
-  { code: 'E4', name: 'U15 Boys Singles',     format_type: 'knockout', gender: 'M',     age_group: 'U15',   court_pool: 'boys',  depends_on_codes: [],            handicap_rule: null,        status: 'pending' },
-  { code: 'E5', name: 'U15 Girls Singles',    format_type: 'knockout', gender: 'F',     age_group: 'U15',   court_pool: 'girls', depends_on_codes: ['E3','E4'],   handicap_rule: null,        status: 'pending' },
-  { code: 'E6', name: 'U13/U15 Mixed Doubles RR', format_type: 'rr',   gender: 'mixed', age_group: 'mixed', court_pool: 'any',   depends_on_codes: [],            handicap_rule: null,        status: 'pending' },
-  { code: 'E7', name: 'U13 Girls Singles',    format_type: 'knockout', gender: 'F',     age_group: 'U13',   court_pool: 'girls', depends_on_codes: [],            handicap_rule: 'P1,P2:3-0', status: 'pending' },
-  { code: 'E8', name: 'Girls Doubles',        format_type: 'rr',       gender: 'F',     age_group: 'mixed', court_pool: 'girls', depends_on_codes: [],            handicap_rule: null,        status: 'pending' },
+  { code: 'E2', name: 'U11 Boys Doubles',         format_type: 'hybrid', gender: 'M', age_group: 'U11',   court_pool: 'boys',  depends_on_codes: ['E1'],        handicap_rule: null,        status: 'pending' },
+  { code: 'E3', name: 'U13 Boys Singles',         format_type: 'hybrid', gender: 'M', age_group: 'U13',   court_pool: 'boys',  depends_on_codes: [],            handicap_rule: null,        status: 'pending' },
+  { code: 'E4', name: 'U15 Boys Singles',         format_type: 'hybrid', gender: 'M', age_group: 'U15',   court_pool: 'boys',  depends_on_codes: [],            handicap_rule: null,        status: 'pending' },
+  { code: 'E5', name: 'U13/U15 Boys Doubles',     format_type: 'hybrid', gender: 'M', age_group: 'mixed', court_pool: 'boys',  depends_on_codes: ['E3','E4'],   handicap_rule: null,        status: 'pending' },
+  { code: 'E6', name: 'U11 Girls Singles',         format_type: 'rr',     gender: 'F', age_group: 'U11',   court_pool: 'girls', depends_on_codes: [],            handicap_rule: null,        status: 'pending' },
+  { code: 'E7', name: 'U13/U15 Girls Singles',    format_type: 'hybrid', gender: 'F', age_group: 'mixed', court_pool: 'girls', depends_on_codes: [],            handicap_rule: 'P1,P2:3-0', status: 'pending' },
+  { code: 'E8', name: 'Girls Doubles',             format_type: 'rr',     gender: 'F', age_group: 'mixed', court_pool: 'girls', depends_on_codes: ['E6','E7'],   handicap_rule: null,        status: 'pending' },
 ];
 
 async function main() {

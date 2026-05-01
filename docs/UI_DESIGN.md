@@ -223,7 +223,7 @@ Event picker chips render immediately (static config). Bracket area shows skelet
 *Empty (event not yet active — E8 before draw posted):*
 Event picker visible. Bracket area: "Draw not posted yet — check back after 14:15"
 
-*Populated — Knockout events (E1–E5, E7):*
+*Populated — Bracket events (E1 knockout; E2–E5, E7 hybrid):*
 ```
 ┌─────────────────────────────┐
 │ Brackets                🔄  │
@@ -344,7 +344,7 @@ Three-way circular tie (EC-012): all tied rows highlighted amber. Note below tab
 │ └─────────────────────────┘ │
 │                             │
 │ ┌─────────────────────────┐ │
-│ │ U13 Girls Singles       │ │  ← animates in as published
+│ │ U13/U15 Girls Singles       │ │  ← animates in as published
 │ │ 🥇 Priya Singh          │ │
 │ │ ...                     │ │
 │ └─────────────────────────┘ │
@@ -704,7 +704,7 @@ Button: "Run BLP Computation"
 │ U13 Boys Singles            │
 │ ○ Pending (3 matches left)  │  ← grey, not tappable
 ├─────────────────────────────┤
-│ U13 Girls Singles           │
+│ U13/U15 Girls Singles           │
 │ ★ Published                 │  ← gold → tap to view/unpublish
 ├─────────────────────────────┤
 │ (remaining 5 events...)     │

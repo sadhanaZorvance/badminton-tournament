@@ -554,7 +554,7 @@ function RoundRobinView({
   teamMap,
   onMatchClick,
 }: RoundRobinViewProps) {
-  const isTeamEvent = event.code === 'E8';
+  const isTeamEvent = ['E2', 'E5', 'E8'].includes(event.code);
 
   if (pools.length === 0) {
     return (
