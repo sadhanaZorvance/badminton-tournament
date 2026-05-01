@@ -52,7 +52,8 @@ export type AuditActionType =
   | 'trigger_e8_draw'
   | 'podium_drafted'
   | 'podium_published'
-  | 'podium_unpublished';
+  | 'podium_unpublished'
+  | 'match_released';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Entities

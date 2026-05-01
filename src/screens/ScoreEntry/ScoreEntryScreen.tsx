@@ -115,6 +115,11 @@ export default function ScoreEntryScreen({ basePath, loginPath }: ScoreEntryScre
   const [recording, setRecording] = useState(false);
   const [recordError, setRecordError] = useState<string | null>(null);
 
+  // Release match (wrong match started, no scores yet)
+  const [showReleaseModal, setShowReleaseModal] = useState(false);
+  const [releasing, setReleasing] = useState(false);
+  const [releaseError, setReleaseError] = useState<string | null>(null);
+
   // Demo mode
   const demo = isDemoMode();
   const [simulating, setSimulating] = useState(false);
@@ -357,6 +362,30 @@ export default function ScoreEntryScreen({ basePath, loginPath }: ScoreEntryScre
       setCompleteError(msg);
     } finally {
       setCompleting(false);
+    }
+  }
+
+  async function handleRelease() {
+    if (!match || releasing) return;
+    setReleaseError(null);
+    setReleasing(true);
+    try {
+      const { error: updateError } = await supabase
+        .from('matches')
+        .update({ status: 'ready', court: null })
+        .eq('id', match.id)
+        .eq('status', 'in_progress');
+      if (updateError) throw updateError;
+      await supabase.from('audit_log').insert({
+        match_id: match.id,
+        action: 'match_released',
+        actor: adminName,
+        payload: { reason: 'wrong_match_started' },
+      });
+      navigate(withDemoQuery(`${basePath}/picker`));
+    } catch (err) {
+      setReleaseError(err instanceof Error ? err.message : 'Could not release match');
+      setReleasing(false);
     }
   }
 
@@ -865,7 +894,7 @@ export default function ScoreEntryScreen({ basePath, loginPath }: ScoreEntryScre
                 )}
 
                 {match.status === 'in_progress' && (
-                  <div className="text-center mt-6">
+                  <div className="text-center mt-6 space-y-3">
                     <button
                       type="button"
                       onClick={openRecordModal}
@@ -873,6 +902,20 @@ export default function ScoreEntryScreen({ basePath, loginPath }: ScoreEntryScre
                     >
                       Walkover / Retire
                     </button>
+                    {matchSets.length === 0 && (
+                      <div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setReleaseError(null);
+                            setShowReleaseModal(true);
+                          }}
+                          className="text-slate font-body text-xs hover:text-amber-warning underline-offset-4 hover:underline"
+                        >
+                          ↩ Wrong match — release back to queue
+                        </button>
+                      </div>
+                    )}
                   </div>
                 )}
               </>
@@ -933,6 +976,31 @@ export default function ScoreEntryScreen({ basePath, loginPath }: ScoreEntryScre
             setShowRecordModal(false);
             setRecordError(null);
           }}
+        />
+      )}
+
+      {showReleaseModal && (
+        <ConfirmModal
+          title="Release match?"
+          body={
+            <>
+              <p>This returns the match to the Ready queue so another admin can start it on the correct court.</p>
+              {releaseError && (
+                <div className="mt-3">
+                  <ErrorBanner message={releaseError} onRetry={() => void handleRelease()} />
+                </div>
+              )}
+            </>
+          }
+          confirmLabel={releasing ? 'Releasing…' : 'Release match'}
+          cancelLabel="Keep going"
+          onConfirm={() => void handleRelease()}
+          onCancel={() => {
+            if (releasing) return;
+            setShowReleaseModal(false);
+            setReleaseError(null);
+          }}
+          variant="destructive"
         />
       )}
 
