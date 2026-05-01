@@ -3,28 +3,11 @@ import LoginScreen from './screens/Login/LoginScreen';
 import MatchPickerScreen from './screens/MatchPicker/MatchPickerScreen';
 import ScoreEntryScreen from './screens/ScoreEntry/ScoreEntryScreen';
 import EventControlScreen from './screens/EventControl/EventControlScreen';
+import ChampionBoardAdminScreen from './screens/ChampionBoardAdmin/ChampionBoardAdminScreen';
+import PublicSiteScreen from './screens/Public/PublicSiteScreen';
 import ProtectedRoute from './components/ProtectedRoute';
 import AdminHeader from './components/AdminHeader';
 import { getCourtAdminSlug, getTopAdminSlug } from './lib/auth';
-import logo from './assets/logo.png';
-
-function PublicPlaceholder() {
-  return (
-    <div className="min-h-screen bg-navy text-white flex flex-col items-center justify-center px-6 py-10">
-      <img src={logo} alt="Leo Badminton Club" className="h-24 mb-6" />
-      <h1 className="font-display text-4xl text-gold-bright tracking-wide mb-2">
-        Leo Rising Stars 2026
-      </h1>
-      <p className="font-body text-slate text-lg mb-10">Smash Your Limits</p>
-      <p className="font-body text-slate text-sm">
-        Public site coming soon.
-      </p>
-      <footer className="mt-12 text-slate text-xs">
-        Powered by Zorvance Technology · info@zorvance.com
-      </footer>
-    </div>
-  );
-}
 
 function AdminPlaceholder({ basePath, loginPath, title }: { basePath: string; loginPath: string; title: string }) {
   return (
@@ -61,7 +44,7 @@ export default function App() {
     return (
       <BrowserRouter>
         <Routes>
-          <Route path="/" element={<PublicPlaceholder />} />
+          <Route path="/" element={<PublicSiteScreen />} />
           <Route path="*" element={<MissingSlugBanner />} />
         </Routes>
       </BrowserRouter>
@@ -74,7 +57,7 @@ export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<PublicPlaceholder />} />
+        <Route path="/" element={<PublicSiteScreen />} />
 
         <Route
           path={courtBase}
@@ -137,7 +120,7 @@ export default function App() {
           path={`${topBase}/champion-board`}
           element={
             <ProtectedRoute role="top_admin" loginPath={topBase}>
-              <AdminPlaceholder basePath={topBase} loginPath={topBase} title="Champion Board" />
+              <ChampionBoardAdminScreen basePath={topBase} loginPath={topBase} />
             </ProtectedRoute>
           }
         />

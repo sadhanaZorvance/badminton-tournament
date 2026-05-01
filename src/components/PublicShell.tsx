@@ -5,10 +5,18 @@ import BottomTabBar, { type PublicTab } from './BottomTabBar';
 interface PublicShellProps {
   activeTab: PublicTab;
   onTabChange: (tab: PublicTab) => void;
+  onRefresh?: () => void;
+  refreshing?: boolean;
   children: ReactNode;
 }
 
-export default function PublicShell({ activeTab, onTabChange, children }: PublicShellProps) {
+export default function PublicShell({
+  activeTab,
+  onTabChange,
+  onRefresh,
+  refreshing = false,
+  children,
+}: PublicShellProps) {
   return (
     <div className="min-h-screen bg-navy text-white flex flex-col">
       <header className="sticky top-0 z-30 bg-navy-dark border-b border-navy-light">
@@ -17,6 +25,30 @@ export default function PublicShell({ activeTab, onTabChange, children }: Public
           <span className="font-display text-gold-bright text-lg tracking-wide">
             Leo Rising Stars 2026
           </span>
+          {onRefresh && (
+            <button
+              type="button"
+              onClick={onRefresh}
+              aria-label="Refresh"
+              className="ml-auto p-2 -m-2 text-slate hover:text-gold-bright transition-colors"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={2}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className={`w-5 h-5 ${refreshing ? 'animate-spin' : ''}`}
+              >
+                <path d="M21 12a9 9 0 0 1-15.5 6.36L3 16" />
+                <path d="M3 12a9 9 0 0 1 15.5-6.36L21 8" />
+                <polyline points="21 3 21 8 16 8" />
+                <polyline points="3 21 3 16 8 16" />
+              </svg>
+            </button>
+          )}
         </div>
       </header>
 
