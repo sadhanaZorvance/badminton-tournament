@@ -26,6 +26,7 @@ const ROUND_COLUMN_ORDER: MatchRound[] = ['R1', 'BLP', 'QF', 'SF', 'F', '3P'];
 
 const ROUND_COLUMN_LABEL: Record<MatchRound, string> = {
   R1: 'Round 1',
+  RR: 'Round Robin',
   BLP: 'BLP',
   QF: 'Quarters',
   SF: 'Semis',
@@ -293,8 +294,8 @@ function EventBracket({
   teamMap,
   onMatchClick,
 }: EventBracketProps) {
-  // E8 special: draw not yet posted
-  if (event.code === 'E8' && !event.draw_locked) {
+  // E8 special: draw not yet posted (only hide when there are genuinely no matches)
+  if (event.code === 'E8' && !event.draw_locked && matches.length === 0) {
     return (
       <div className="rounded-lg bg-navy-light/40 border border-navy-light px-4 py-12 text-center">
         <p className="font-body text-white text-base mb-1">
@@ -557,9 +558,57 @@ function RoundRobinView({
   const isTeamEvent = ['E2', 'E5', 'E8'].includes(event.code);
 
   if (pools.length === 0) {
+    // No pool created yet (seeded dev data — lock_e8_draw creates the pool at runtime).
+    // Derive entrants and standings directly from match participants.
+    const entrantIds = [
+      ...new Set(
+        matches.flatMap((m) => [m.p1_id, m.p2_id]).filter((id): id is string => id !== null),
+      ),
+    ];
+    const lookup: Record<string, Player> = { ...playerMap };
+    if (isTeamEvent) {
+      for (const id of entrantIds) {
+        const team = teamMap[id];
+        if (team) {
+          lookup[id] = {
+            id: team.id,
+            code: '',
+            full_name: team.display_name,
+            first_name: team.display_name,
+            middle_name: null,
+            last_name: null,
+            display_name: team.display_name,
+            age_group: 'U15',
+            gender: 'F',
+            status: 'active',
+            created_at: team.created_at,
+          };
+        }
+      }
+    }
+    const setRows = synthSetsFromMatches(matches);
+    const rows = computeStandings(matches, setRows, entrantIds, lookup);
+    const sortedMatches = [...matches].sort((a, b) => compareSlot(a.bracket_slot, b.bracket_slot));
     return (
-      <div className="rounded-lg bg-navy-light/40 border border-navy-light px-4 py-12 text-center">
-        <p className="font-body text-slate text-sm">No pools yet for this event.</p>
+      <div className="space-y-3">
+        <h3 className="font-body text-[11px] uppercase tracking-[0.2em] text-slate">
+          {event.name}
+        </h3>
+        <RRStandingsTable rows={rows} entrantHeading={isTeamEvent ? 'Team' : 'Player'} />
+        {sortedMatches.length > 0 && (
+          <ul className="space-y-2">
+            {sortedMatches.map((m) => (
+              <li key={m.id}>
+                <BracketCell
+                  match={m}
+                  playerMap={playerMap}
+                  teamMap={teamMap}
+                  onClick={() => onMatchClick(m.id)}
+                />
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
     );
   }
