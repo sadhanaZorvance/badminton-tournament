@@ -1,6 +1,8 @@
 import { useCallback, useState } from 'react';
 import PublicShell from '../../components/PublicShell';
 import type { PublicTab } from '../../components/BottomTabBar';
+import StandingsScreen from '../Standings/StandingsScreen';
+import BracketsTab from './BracketsTab';
 import NowPlayingTab from './NowPlayingTab';
 
 function ComingSoon({ name }: { name: string }) {
@@ -31,8 +33,8 @@ export default function PublicSiteScreen() {
       refreshing={refreshing}
     >
       {activeTab === 'now-playing' && <NowPlayingTab refreshTick={refreshTick} />}
-      {activeTab === 'brackets' && <ComingSoon name="Brackets" />}
-      {activeTab === 'standings' && <ComingSoon name="Standings" />}
+      {activeTab === 'brackets' && <BracketsTab refreshTick={refreshTick} />}
+      {activeTab === 'standings' && <StandingsScreen key={refreshTick} />}
       {activeTab === 'champion-board' && <ComingSoon name="Champion Board" />}
     </PublicShell>
   );

@@ -35,6 +35,6 @@
 19 | COMPLETE | 2026-04-30 23:13 | Champion Board Admin + Podium
 
 ## PHASE E — PUBLIC SITE
-20 | PENDING | | Public Site Shell + Now Playing
+20 | COMPLETE | 2026-04-30 23:39 | Public Site Shell + Now Playing
 21 | PENDING | | Brackets + Standings Tabs
 22 | PENDING | | Champion Board + Realtime
