@@ -33,8 +33,59 @@ const ROUND_COLUMN_LABEL: Record<MatchRound, string> = {
   F: 'Final',
   '3P': '3rd Place',
   ConRR: 'Consolation',
-  ConF: 'Consolation Final',
+  ConF: 'Con. Final',
 };
+
+const ROUND_FORMAT_HINT: Partial<Record<MatchRound, string>> = {
+  R1: 'to 21',
+  BLP: 'to 21',
+  RR: 'to 21',
+  QF: 'to 30',
+  SF: 'to 30',
+  F: '3×15',
+  '3P': 'to 30',
+  ConRR: 'to 21',
+  ConF: 'to 30',
+};
+
+function getEventFormatRules(event: Event): string {
+  if (event.format_type === 'rr') return 'Round Robin · first to 21';
+  if (event.format_type === 'hybrid')
+    return 'RR · to 21 · QF/SF/3P · to 30 · Final · best of 3×15';
+  // knockout (E1 has BLP + Consolation)
+  return event.code === 'E1'
+    ? 'R1 & BLP · to 21 · QF/SF/3P · to 30 · Final · best of 3×15 · +Consolation'
+    : 'R1 · to 21 · QF/SF/3P · to 30 · Final · best of 3×15';
+}
+
+function EventInfoBar({ event }: { event: Event }) {
+  const formatBadge =
+    event.format_type === 'rr'
+      ? 'Round Robin'
+      : event.format_type === 'hybrid'
+        ? 'Hybrid'
+        : 'Knockout';
+
+  return (
+    <div className="rounded-lg bg-navy-light/40 border border-white/[0.06] px-3 py-2.5 space-y-1">
+      <div className="flex items-center justify-between gap-2">
+        <h2 className="font-display text-sm text-white leading-tight">{event.name}</h2>
+        <span className="shrink-0 inline-block px-2 py-0.5 rounded-full bg-gold/10 border border-gold/30 text-[10px] font-body text-gold tracking-wide">
+          {formatBadge}
+        </span>
+      </div>
+      <p className="font-body text-[10px] text-slate leading-relaxed">
+        {getEventFormatRules(event)}
+      </p>
+      {event.handicap_rule && (
+        <p className="font-body text-[10px] text-amber-warning flex items-center gap-1">
+          <span aria-hidden="true">★</span>
+          <span>Handicap · both players start each set at 3–0</span>
+        </p>
+      )}
+    </div>
+  );
+}
 
 function formatTime(d: Date): string {
   return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -325,20 +376,24 @@ function EventBracket({
 
   if (event.format_type === 'rr') {
     return (
-      <RoundRobinView
-        event={event}
-        matches={matches}
-        pools={eventPools}
-        poolEntrants={poolEntrants}
-        playerMap={playerMap}
-        teamMap={teamMap}
-        onMatchClick={onMatchClick}
-      />
+      <div className="space-y-4">
+        <EventInfoBar event={event} />
+        <RoundRobinView
+          event={event}
+          matches={matches}
+          pools={eventPools}
+          poolEntrants={poolEntrants}
+          playerMap={playerMap}
+          teamMap={teamMap}
+          onMatchClick={onMatchClick}
+        />
+      </div>
     );
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-4">
+      <EventInfoBar event={event} />
       <BracketTree
         matches={knockoutMatches}
         playerMap={playerMap}
@@ -386,13 +441,20 @@ function BracketTree({ matches, playerMap, teamMap, onMatchClick }: BracketTreeP
 
   return (
     <div className="-mx-4 px-4 overflow-x-auto touch-pan-x" role="region" aria-label="Bracket">
-      <div className="flex gap-3 pb-2 min-w-max">
+      <div className="flex gap-2 pb-2 min-w-max">
         {columns.map((col) => (
-          <div key={col.round} className="w-[200px] shrink-0 space-y-2">
-            <h3 className="font-body text-[11px] uppercase tracking-[0.2em] text-slate px-1">
-              {col.label}
-            </h3>
-            <div className="space-y-2">
+          <div key={col.round} className="w-[156px] shrink-0 space-y-1.5">
+            <div className="px-1">
+              <h3 className="font-body text-[10px] uppercase tracking-[0.18em] text-slate leading-none">
+                {col.label}
+              </h3>
+              {ROUND_FORMAT_HINT[col.round] && (
+                <span className="font-body text-[9px] text-slate/50 leading-none">
+                  {ROUND_FORMAT_HINT[col.round]}
+                </span>
+              )}
+            </div>
+            <div className="space-y-1.5">
               {col.matches.map((m) => (
                 <BracketCell
                   key={m.id}
@@ -434,41 +496,37 @@ function BracketCell({ match, playerMap, teamMap, onClick }: BracketCellProps) {
   const p1Scores = sets.map((s) => s.p1);
   const p2Scores = sets.map((s) => s.p2);
 
-  const baseClass = isLive
-    ? 'relative bg-navy-light border border-gold/40 pl-4 shadow-glass-live'
-    : 'bg-navy-light/70 border border-white/[0.07] px-3 shadow-glass';
-
   return (
     <button
       type="button"
       onClick={onClick}
-      className={`w-full text-left rounded-lg ${baseClass} py-2 transition-colors hover:border-gold/60 min-h-[64px]`}
+      className={`w-full text-left rounded-md py-1.5 transition-colors hover:border-gold/60 min-h-[44px] relative ${
+        isLive
+          ? 'bg-navy-light border border-gold/40 pl-3 pr-2 shadow-glass-live'
+          : 'bg-navy-light/70 border border-white/[0.07] px-2.5 shadow-glass'
+      }`}
     >
       {isLive && (
         <span
           aria-hidden="true"
-          className="absolute left-0 top-0 bottom-0 w-1 bg-gold-bright rounded-l-lg"
+          className="absolute left-0 top-0 bottom-0 w-1 bg-gold-bright rounded-l-md"
         />
       )}
-      <div className="flex items-center justify-between gap-2 mb-1">
-        <span className="font-body text-[10px] uppercase tracking-wider text-slate">
+      <div className="flex items-center justify-between gap-1 mb-0.5">
+        <span className="font-body text-[9px] uppercase tracking-wider text-slate/70 leading-none">
           {match.bracket_slot}
         </span>
         {isLive && (
-          <span className="inline-flex items-center gap-1 text-[9px] font-body font-semibold text-gold-bright uppercase tracking-wider">
-            <span className="w-1.5 h-1.5 rounded-full bg-gold-bright animate-pulse" />
+          <span className="inline-flex items-center gap-0.5 text-[8px] font-body font-semibold text-gold-bright uppercase tracking-wider leading-none">
+            <span className="w-1 h-1 rounded-full bg-gold-bright animate-pulse" />
             Live
           </span>
         )}
         {match.status === 'walkover' && (
-          <span className="text-[9px] font-body font-semibold text-amber-warning uppercase tracking-wider">
-            Walkover
-          </span>
+          <span className="text-[8px] font-body text-amber-warning uppercase tracking-wider leading-none">WO</span>
         )}
         {match.status === 'retired' && (
-          <span className="text-[9px] font-body font-semibold text-amber-warning uppercase tracking-wider">
-            Retired
-          </span>
+          <span className="text-[8px] font-body text-amber-warning uppercase tracking-wider leading-none">Ret</span>
         )}
       </div>
       <PlayerRow
@@ -514,12 +572,12 @@ function PlayerRow({ name, scores, isWinner, isLoser, isPending, handicap }: Pla
       ? 'text-slate'
       : 'text-white';
   return (
-    <div className="flex items-center justify-between gap-2 py-0.5">
-      <span className={`font-body text-sm truncate ${nameClass}`}>
+    <div className="flex items-center justify-between gap-1.5">
+      <span className={`font-body text-xs leading-tight truncate ${nameClass}`}>
         {name}
         {handicap && (
           <span
-            className="text-amber-warning ml-1"
+            className="text-amber-warning ml-0.5 text-[9px]"
             title="Handicap match"
             aria-label="Handicap"
           >
@@ -528,7 +586,7 @@ function PlayerRow({ name, scores, isWinner, isLoser, isPending, handicap }: Pla
         )}
       </span>
       {scores.length > 0 && (
-        <span className={`font-body text-sm tabular-nums shrink-0 ${scoreClass}`}>
+        <span className={`font-body text-xs leading-tight tabular-nums shrink-0 ${scoreClass}`}>
           {scores.join(' ')}
         </span>
       )}
@@ -761,8 +819,10 @@ function ConsolationSection({
   teamMap,
   onMatchClick,
 }: ConsolationSectionProps) {
+  const [expanded, setExpanded] = useState(false);
   const conRRMatches = matches.filter((m) => m.round === 'ConRR');
   const conFMatches = matches.filter((m) => m.round === 'ConF');
+  const totalMatches = conRRMatches.length + conFMatches.length;
 
   const eventConsolationPoolIds = new Set(
     conRRMatches.map((m) => m.pool_id).filter((id): id is string => !!id),
@@ -770,67 +830,98 @@ function ConsolationSection({
   const consolationPools = pools.filter((p) => eventConsolationPoolIds.has(p.id));
 
   return (
-    <section className="space-y-4">
-      <header className="flex items-center gap-2">
+    <section className="space-y-3">
+      <button
+        type="button"
+        onClick={() => setExpanded((e) => !e)}
+        className="flex items-center gap-2 w-full"
+        aria-expanded={expanded}
+      >
         <span aria-hidden="true" className="h-px flex-1 bg-navy-light" />
-        <h2 className="font-display text-base text-gold-bright tracking-wide">
-          Consolation
-        </h2>
+        <span className="flex items-center gap-1.5 shrink-0">
+          <h2 className="font-display text-sm text-gold-bright tracking-wide">Consolation</h2>
+          <span className="font-body text-[10px] text-slate">
+            · {totalMatches} match{totalMatches !== 1 ? 'es' : ''}
+          </span>
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={2}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className={`w-3.5 h-3.5 text-slate transition-transform duration-200 ${expanded ? 'rotate-180' : ''}`}
+            aria-hidden="true"
+          >
+            <polyline points="6 9 12 15 18 9" />
+          </svg>
+        </span>
         <span aria-hidden="true" className="h-px flex-1 bg-navy-light" />
-      </header>
+      </button>
 
-      {consolationPools.length > 0 ? (
-        consolationPools
-          .sort((a, b) => a.label.localeCompare(b.label))
-          .map((pool) => {
-            const entrantIds = poolEntrants
-              .filter((pe) => pe.pool_id === pool.id && pe.entrant_type === 'player')
-              .map((pe) => pe.entrant_id);
-            const poolMatches = conRRMatches.filter((m) => m.pool_id === pool.id);
-            const setRows = synthSetsFromMatches(poolMatches);
-            const rows = computeStandings(poolMatches, setRows, entrantIds, playerMap);
-            const heading =
-              pool.label === 'Main' ? 'Pool' : `Pool ${pool.label}`;
-            return (
-              <div key={pool.id} className="space-y-2">
-                <h3 className="font-body text-[11px] uppercase tracking-[0.2em] text-slate">
-                  {heading}
-                </h3>
-                <RRStandingsTable rows={rows} entrantHeading="Player" />
-              </div>
-            );
-          })
-      ) : conRRMatches.length > 0 ? (
-        // Pool not yet generated (e.g. R1 losers haven't cascaded into ConRR.main)
-        <div className="space-y-2">
-          {conRRMatches
-            .sort((a, b) => compareSlot(a.bracket_slot, b.bracket_slot))
-            .map((m) => (
-              <BracketCell
-                key={m.id}
-                match={m}
-                playerMap={playerMap}
-                teamMap={teamMap}
-                onClick={() => onMatchClick(m.id)}
-              />
-            ))}
-        </div>
-      ) : null}
+      {!expanded && (
+        <p className="font-body text-[10px] text-slate/60 text-center -mt-1">
+          Tap above to view consolation bracket
+        </p>
+      )}
 
-      {conFMatches.length > 0 && (
-        <div className="space-y-2">
-          <h3 className="font-body text-[11px] uppercase tracking-[0.2em] text-slate">
-            Consolation Final
-          </h3>
-          {conFMatches.map((m) => (
-            <BracketCell
-              key={m.id}
-              match={m}
-              playerMap={playerMap}
-              teamMap={teamMap}
-              onClick={() => onMatchClick(m.id)}
-            />
-          ))}
+      {expanded && (
+        <div className="space-y-4">
+          {consolationPools.length > 0 ? (
+            consolationPools
+              .sort((a, b) => a.label.localeCompare(b.label))
+              .map((pool) => {
+                const entrantIds = poolEntrants
+                  .filter((pe) => pe.pool_id === pool.id && pe.entrant_type === 'player')
+                  .map((pe) => pe.entrant_id);
+                const poolMatches = conRRMatches.filter((m) => m.pool_id === pool.id);
+                const setRows = synthSetsFromMatches(poolMatches);
+                const rows = computeStandings(poolMatches, setRows, entrantIds, playerMap);
+                const heading =
+                  pool.label === 'Main' ? 'Pool' : `Pool ${pool.label}`;
+                return (
+                  <div key={pool.id} className="space-y-2">
+                    <h3 className="font-body text-[10px] uppercase tracking-[0.2em] text-slate">
+                      {heading}
+                    </h3>
+                    <RRStandingsTable rows={rows} entrantHeading="Player" />
+                  </div>
+                );
+              })
+          ) : conRRMatches.length > 0 ? (
+            // Pool not yet generated (e.g. R1 losers haven't cascaded into ConRR.main)
+            <div className="space-y-1.5">
+              {conRRMatches
+                .sort((a, b) => compareSlot(a.bracket_slot, b.bracket_slot))
+                .map((m) => (
+                  <BracketCell
+                    key={m.id}
+                    match={m}
+                    playerMap={playerMap}
+                    teamMap={teamMap}
+                    onClick={() => onMatchClick(m.id)}
+                  />
+                ))}
+            </div>
+          ) : null}
+
+          {conFMatches.length > 0 && (
+            <div className="space-y-1.5">
+              <h3 className="font-body text-[10px] uppercase tracking-[0.2em] text-slate">
+                Consolation Final
+              </h3>
+              {conFMatches.map((m) => (
+                <BracketCell
+                  key={m.id}
+                  match={m}
+                  playerMap={playerMap}
+                  teamMap={teamMap}
+                  onClick={() => onMatchClick(m.id)}
+                />
+              ))}
+            </div>
+          )}
         </div>
       )}
     </section>

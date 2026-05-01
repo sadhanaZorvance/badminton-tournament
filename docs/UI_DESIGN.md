@@ -226,37 +226,39 @@ Event picker visible. Bracket area: "Draw not posted yet — check back after 14
 *Populated — Bracket events (E1 knockout; E2–E5, E7 hybrid):*
 ```
 ┌─────────────────────────────┐
-│ Brackets                🔄  │
+│ [E1 U11 Boys Singles][E2].. │  ← selected chip expands to show event name
 ├─────────────────────────────┤
-│ [E1][E2][E3][E4][E5][E6]... │  ← horizontal scroll chips
+│ U11 Boys Singles  [Knockout]│  ← EventInfoBar: name + format badge
+│ R1 & BLP · to 21 · QF–3P · to 30 · Final · best of 3×15 · +Consolation │
 ├─────────────────────────────┤
-│   R1      QF      SF    F   │  ← column headers
+│  R1    QF    SF    F        │  ← column headers (156px wide)
+│  to 21 to 30 to 30 3×15    │  ← format hint under each header
 │                             │
-│  [Aarav]──┐                 │
-│           ├──[Aarav]──┐     │
-│  [Rohan]──┘           │     │
-│                       ├─[?] │
-│  [Priya]──┐           │     │
-│           ├──[  ?  ]──┘     │
-│  [TBD  ]──┘                 │
-│                             │  ← bracket scrolls horizontally
-│ ── Consolation ──────────── │
-│  Pool A  [table]            │
+│  [compact tile]──┐          │
+│                  ├──[tile]  │
+│  [compact tile]──┘          │
+│  ...                        │  ← bracket scrolls horizontally
+├─────────────────────────────┤
+│ ─── Consolation · N matches ▼│  ← collapsed by default, tap to expand
 └─────────────────────────────┘
 ```
 
-In-progress match: green left border + "LIVE" micro badge. Complete match: winner name bold, loser name muted. Pending match: "TBD" placeholder. E7 matches: ★ on P1/P2 name.
+Compact tile (min-h 44px): slot label (9px) + status badge inline, player name (text-xs), scores (text-xs tabular). Column width 156px. Gold live border 4px left.
+EventInfoBar: gold-on-navy card below event picker. Shows event.name (font-display), format type chip (Knockout/Hybrid/Round Robin), and match format rules string. E7 adds amber handicap note.
+Consolation: collapsed by default with match count in toggle header. Tap to expand pools + standings.
+
+In-progress match: gold left border + "LIVE" micro badge. Complete match: winner name bold, loser name muted. Pending match: "TBD" placeholder. E7 matches: ★ on P1/P2 name.
 
 *Populated — Round Robin events (E6, E8):*
-Table format. Columns: Player/Team | MP | W | L | PF | PA. Sorted by current standings. Tied rows: ↑ indicator.
+EventInfoBar above table. Table format: Player/Team | MP | W | L | PF | PA. Sorted by current standings. Tied rows: ↑ indicator.
 
 *Error:* Red banner + retry, last data visible.
 
 **Key interactions:**
-- Event picker chips: tap to switch event
+- Event picker chips: tap to switch event. Selected chip shows code + full event name (2 lines).
 - Match slot tap: small modal overlay with full set scores and status
 - Bracket scrolls horizontally on mobile (touch-scroll, no pagination)
-- RR table rows: display only, not tappable
+- Consolation: collapsed by default, tap header to expand/collapse
 - Manual refresh top right
 
 **Backend dependencies:** getBracket(event_id), getInProgressMatches(), static wiring config

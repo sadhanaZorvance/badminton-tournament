@@ -35,8 +35,17 @@ export default function EventPicker({ events, selectedEventId, onSelect }: Event
                 : 'bg-navy-light/50 text-slate-light border-navy-light hover:bg-navy-light'
             }`}
           >
-            <span className={`w-2 h-2 rounded-full ${STATUS_DOT_CLASS[event.status]}`} />
-            <span className="font-semibold">{event.code}</span>
+            <span className={`w-2 h-2 rounded-full shrink-0 ${STATUS_DOT_CLASS[event.status]}`} />
+            {isSelected ? (
+              <span className="flex flex-col leading-none">
+                <span className="font-semibold text-sm">{event.code}</span>
+                <span className="text-[9px] font-normal text-gold/80 leading-tight mt-0.5 max-w-[88px] truncate">
+                  {event.name}
+                </span>
+              </span>
+            ) : (
+              <span className="font-semibold">{event.code}</span>
+            )}
           </button>
         );
       })}
