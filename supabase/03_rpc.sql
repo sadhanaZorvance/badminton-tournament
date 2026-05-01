@@ -426,6 +426,14 @@ declare
   v_winner_count       int;
   v_loser_count        int;
   v_podium_drafted     boolean;
+  -- ConRR → ConF resolution
+  v_conrr_outstanding  int;
+  v_conf_match_id      uuid;
+  v_top1_id            uuid;
+  v_top1_type          entrant_type_t;
+  v_top2_id            uuid;
+  v_top2_type          entrant_type_t;
+  v_conrr_row          record;
 begin
   if p_admin_name is null or length(trim(p_admin_name)) = 0 then
     raise exception 'INVALID_ADMIN_NAME: admin name required';
@@ -462,6 +470,72 @@ begin
 
   v_winner_count := public._resolve_downstream(p_winner_id, p_winner_type, p_downstream_updates);
   v_loser_count  := public._resolve_downstream(v_loser_id,  v_loser_type,  p_loser_downstream_updates);
+
+  -- When the completed match is a ConRR match, check if all 3 are done and fill ConF.
+  if v_match.round = 'ConRR' then
+    select count(*) into v_conrr_outstanding
+      from public.matches
+     where event_id = v_match.event_id
+       and round = 'ConRR'
+       and status not in ('complete','walkover','retired');
+
+    if v_conrr_outstanding = 0 then
+      -- Rank entrants by wins desc, then point differential desc.
+      for v_conrr_row in
+        select ent_id, ent_type
+          from (
+            select
+              ent_id, ent_type,
+              sum(case when is_win then 1 else 0 end)::int as wins,
+              sum(pf - pa)::int as diff
+            from (
+              select p1_id as ent_id, p1_type as ent_type,
+                     (winner_id = p1_id) as is_win,
+                     coalesce((score_sets->0->>'p1')::int, 0) as pf,
+                     coalesce((score_sets->0->>'p2')::int, 0) as pa
+                from public.matches
+               where event_id = v_match.event_id and round = 'ConRR'
+                 and p1_id is not null
+              union all
+              select p2_id as ent_id, p2_type as ent_type,
+                     (winner_id = p2_id) as is_win,
+                     coalesce((score_sets->0->>'p2')::int, 0) as pf,
+                     coalesce((score_sets->0->>'p1')::int, 0) as pa
+                from public.matches
+               where event_id = v_match.event_id and round = 'ConRR'
+                 and p2_id is not null
+            ) sub
+            group by ent_id, ent_type
+          ) ranked
+         order by wins desc, diff desc
+         limit 2
+      loop
+        if v_top1_id is null then
+          v_top1_id   := v_conrr_row.ent_id;
+          v_top1_type := v_conrr_row.ent_type;
+        else
+          v_top2_id   := v_conrr_row.ent_id;
+          v_top2_type := v_conrr_row.ent_type;
+        end if;
+      end loop;
+
+      if v_top1_id is not null and v_top2_id is not null then
+        select id into v_conf_match_id
+          from public.matches
+         where event_id = v_match.event_id and bracket_slot = 'ConF';
+
+        if v_conf_match_id is not null then
+          update public.matches
+             set p1_id   = v_top1_id,
+                 p1_type = v_top1_type,
+                 p2_id   = v_top2_id,
+                 p2_type = v_top2_type,
+                 status  = 'ready'
+           where id = v_conf_match_id;
+        end if;
+      end if;
+    end if;
+  end if;
 
   insert into public.audit_log (action_type, match_id, event_id, actor_name, payload)
   values (
@@ -1177,6 +1251,7 @@ declare
   v_team_id        uuid;
   v_p1_dn          text;
   v_p2_dn          text;
+  v_e8_pool_id     uuid;
   i int; j int;
 begin
   if p_admin_name is null or length(trim(p_admin_name)) = 0 then
@@ -1249,6 +1324,17 @@ begin
     v_team_ids := array_append(v_team_ids, v_team_id);
   end loop;
 
+  -- Create Main pool for E8 standings (BracketsTab requires a pool row)
+  insert into public.pools (event_id, label)
+  values (p_event_id, 'Main')
+  returning id into v_e8_pool_id;
+
+  -- Insert pool entrants (all 5 teams)
+  for i in 1..array_length(v_team_ids, 1) loop
+    insert into public.pool_entrants (pool_id, entrant_id, entrant_type)
+    values (v_e8_pool_id, v_team_ids[i], 'team');
+  end loop;
+
   -- Generate 10 RR matches (all 5-choose-2 combinations)
   for i in 1..4 loop
     for j in (i+1)..5 loop
@@ -1256,12 +1342,12 @@ begin
         event_id, round, bracket_slot,
         p1_ref, p2_ref,
         p1_id, p2_id, p1_type, p2_type,
-        match_format, status
+        match_format, status, pool_id
       ) values (
-        p_event_id, 'ConRR', format('RR.%s.%s', i, j),
+        p_event_id, 'RR', format('RR.%s.%s', i, j),
         format('T%s', i), format('T%s', j),
         v_team_ids[i], v_team_ids[j], 'team', 'team',
-        'set21', 'ready'
+        'set21', 'ready', v_e8_pool_id
       );
     end loop;
   end loop;
@@ -1411,9 +1497,9 @@ begin
   delete from public.podiums;
   delete from public.teams;
 
-  -- Drop runtime-created matches (BLP, ConRR, ConF, E8 RR — anything in pools or rounds added at runtime).
+  -- Drop runtime-created matches (BLP, E1 ConRR, ConF — plus anything with a pool_id).
+  -- E8 RR matches are caught by pool_id is not null; second delete is a safety net.
   delete from public.matches where round in ('BLP','ConRR','ConF') or pool_id is not null;
-  -- E8 matches are runtime-created (round 'ConRR' covers it but as a safety).
   delete from public.matches m
    using public.events e
    where m.event_id = e.id and e.code = 'E8';

@@ -2,7 +2,7 @@
 // Always client-side, recomputed on read — never stored (BR-025, BR-026, EC-012).
 // Sort order: wins DESC → points_for DESC → head-to-head between tied entrants.
 
-import type { Match, MatchSet, MatchStatus, Player } from '../types';
+import type { Match, MatchSet, MatchStatus } from '../types';
 
 export interface StandingRow {
   entrantId: string;
@@ -32,7 +32,7 @@ function emptyAggregate(): EntrantAggregate {
   return { matchesPlayed: 0, wins: 0, losses: 0, pointsFor: 0, pointsAgainst: 0 };
 }
 
-function nameFor(id: string, playerMap: Record<string, Player>): string {
+function nameFor(id: string, playerMap: Record<string, { display_name: string }>): string {
   return playerMap[id]?.display_name ?? 'Unknown';
 }
 
@@ -56,7 +56,7 @@ export function computeStandings(
   matches: Match[],
   sets: MatchSet[],
   entrantIds: string[],
-  playerMap: Record<string, Player>,
+  playerMap: Record<string, { display_name: string }>,
 ): StandingRow[] {
   const stats = new Map<string, EntrantAggregate>();
   for (const id of entrantIds) stats.set(id, emptyAggregate());

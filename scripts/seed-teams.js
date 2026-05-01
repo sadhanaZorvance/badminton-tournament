@@ -36,10 +36,10 @@ const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
 
 /**
  * Order matters for E2 and E5: index 0 (T1) gets the bye.
- * Pairings for R1 are derived from the remaining indices in order:
- *   R1.1: teams[1] vs teams[2]
- *   R1.2: teams[3] vs teams[4]
- *   R1.3: teams[5] vs teams[6]
+ * Pairings for R1 (confirmed from public schedule):
+ *   R1.1: teams[1] vs teams[6]  (T2 vs T7)
+ *   R1.2: teams[3] vs teams[4]  (T4 vs T5)
+ *   R1.3: teams[2] vs teams[5]  (T3 vs T6)
  */
 const TEAMS = {
   E2: [
@@ -185,16 +185,16 @@ async function insertMatches(eventCode, rows) {
  *
  * Bracket structure:
  *   BYE     — T1 auto-complete, advances to SF1.p1
- *   R1.1    — teams[1] vs teams[2]   (winner → SF1.p2, loser → ConRR.slot1)
- *   R1.2    — teams[3] vs teams[4]   (winner → SF2.p1, loser → ConRR.slot2)
- *   R1.3    — teams[5] vs teams[6]   (winner → SF2.p2, loser → ConRR.slot3)
+ *   R1.1    — teams[1] vs teams[6]   (winner → SF1.p2, loser → ConRR.2/ConRR.3)
+ *   R1.2    — teams[3] vs teams[4]   (winner → SF2.p1, loser → ConRR.1/ConRR.2)
+ *   R1.3    — teams[2] vs teams[5]   (winner → SF2.p2, loser → ConRR.1/ConRR.3)
  *   SF1     — T1 vs Winner:R1.1
  *   SF2     — Winner:R1.2 vs Winner:R1.3
  *   F       — Winner:SF1 vs Winner:SF2
  *   3P      — Loser:SF1 vs Loser:SF2
- *   ConRR.1 — Loser:R1.1 vs Loser:R1.2
- *   ConRR.2 — Loser:R1.1 vs Loser:R1.3
- *   ConRR.3 — Loser:R1.2 vs Loser:R1.3
+ *   ConRR.1 — Loser:R1.2 vs Loser:R1.3
+ *   ConRR.2 — Loser:R1.1 vs Loser:R1.2
+ *   ConRR.3 — Loser:R1.1 vs Loser:R1.3
  *   ConF    — Top1:ConRR vs Top2:ConRR
  */
 function buildHybrid7Matches(eventCode, eventId, teamMap) {
@@ -230,8 +230,8 @@ function buildHybrid7Matches(eventCode, eventId, teamMap) {
     completed_at: new Date().toISOString(),
   });
 
-  // R1.1 / R1.2 / R1.3 — pair indices [1,2], [3,4], [5,6]
-  const r1Pairs = [[1, 2], [3, 4], [5, 6]];
+  // R1.1 / R1.2 / R1.3 — pair indices from public schedule
+  const r1Pairs = [[1, 6], [3, 4], [2, 5]];
   r1Pairs.forEach(([a, b], i) => {
     rows.push({
       event_id: eventId,
@@ -330,9 +330,9 @@ function buildHybrid7Matches(eventCode, eventId, teamMap) {
 
   // ConRR.1 / ConRR.2 / ConRR.3 — round robin between 3 R1 losers
   const conPairs = [
-    ['Loser:R1.1', 'Loser:R1.2'],
-    ['Loser:R1.1', 'Loser:R1.3'],
-    ['Loser:R1.2', 'Loser:R1.3'],
+    ['Loser:R1.2', 'Loser:R1.3'],   // ConRR.1
+    ['Loser:R1.1', 'Loser:R1.2'],   // ConRR.2
+    ['Loser:R1.1', 'Loser:R1.3'],   // ConRR.3
   ];
   conPairs.forEach(([a, b], i) => {
     rows.push({

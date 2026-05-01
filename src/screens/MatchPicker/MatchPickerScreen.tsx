@@ -28,6 +28,7 @@ const COURT_FILTERS: CourtFilter[] = ['All', 'C1', 'C2', 'C3', 'C4', 'C5'];
 
 const PHASE_ORDER: Record<MatchRound, number> = {
   R1: 1,
+  RR: 1,
   BLP: 2,
   ConRR: 3,
   QF: 4,
@@ -209,9 +210,9 @@ export default function MatchPickerScreen({ basePath, loginPath }: MatchPickerSc
     setStarting(true);
     try {
       const { error: rpcError } = await supabase.rpc('start_match', {
-        match_id: match.id,
-        court,
-        admin_name: adminName,
+        p_match_id: match.id,
+        p_court: court,
+        p_admin_name: adminName,
       });
       if (rpcError) {
         const code = parseRpcErrorCode(rpcError.message);

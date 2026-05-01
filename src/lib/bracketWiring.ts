@@ -3,9 +3,9 @@
 // E1 R1 losers, BLP loser, and consolation pool assignments are NOT wired here —
 // those are dynamic and handled by fire_blp / generate_consolation_pools RPCs.
 
-export type SourceResult = 'winner' | 'loser' | 'top1' | 'top2';
+export type SourceResult = 'winner' | 'loser';
 
-export type TargetSlot = 'p1' | 'p2' | 'slot1' | 'slot2' | 'slot3';
+export type TargetSlot = 'p1' | 'p2';
 
 export interface WiringRule {
   source: string;
@@ -52,8 +52,10 @@ const E1_WIRING: WiringRule[] = [
 // ─────────────────────────────────────────────────────────────────────────────
 // Standard 6-player bracket (E2, E3, E4, E5, E7)
 // 3 R1 matches + 1 T1 bye → 2 SF → F + 3P + 3-player ConRR pool + ConF.
-// T1 occupies SF2.p2 by static seed (no wiring rule — seeded directly).
-// R1 losers fill the 3 consolation pool slots in order.
+// T1 occupies SF1.p1 by static seed (no wiring rule — seeded directly).
+// R1 losers each appear in 2 ConRR matches (every pair plays each other once).
+// ConRR ordering: ConRR.1 = R1.2L vs R1.3L, ConRR.2 = R1.1L vs R1.2L, ConRR.3 = R1.1L vs R1.3L
+// ConF is filled by complete_match RPC after all 3 ConRR matches finish.
 // ─────────────────────────────────────────────────────────────────────────────
 
 const STANDARD_BRACKET_WIRING: WiringRule[] = [
@@ -63,19 +65,19 @@ const STANDARD_BRACKET_WIRING: WiringRule[] = [
   { source: 'R1.1', sourceResult: 'winner', target: 'SF1', targetSlot: 'p2' },
   { source: 'R1.2', sourceResult: 'winner', target: 'SF2', targetSlot: 'p1' },
   { source: 'R1.3', sourceResult: 'winner', target: 'SF2', targetSlot: 'p2' },
-  // R1 losers → consolation pool slots
-  { source: 'R1.1', sourceResult: 'loser', target: 'ConRR.main', targetSlot: 'slot1' },
-  { source: 'R1.2', sourceResult: 'loser', target: 'ConRR.main', targetSlot: 'slot2' },
-  { source: 'R1.3', sourceResult: 'loser', target: 'ConRR.main', targetSlot: 'slot3' },
+  // R1 losers → ConRR matches (each loser appears in 2 matches)
+  { source: 'R1.1', sourceResult: 'loser', target: 'ConRR.2', targetSlot: 'p1' },
+  { source: 'R1.1', sourceResult: 'loser', target: 'ConRR.3', targetSlot: 'p1' },
+  { source: 'R1.2', sourceResult: 'loser', target: 'ConRR.1', targetSlot: 'p1' },
+  { source: 'R1.2', sourceResult: 'loser', target: 'ConRR.2', targetSlot: 'p2' },
+  { source: 'R1.3', sourceResult: 'loser', target: 'ConRR.1', targetSlot: 'p2' },
+  { source: 'R1.3', sourceResult: 'loser', target: 'ConRR.3', targetSlot: 'p2' },
   // SF → F
   { source: 'SF1', sourceResult: 'winner', target: 'F', targetSlot: 'p1' },
   { source: 'SF2', sourceResult: 'winner', target: 'F', targetSlot: 'p2' },
   // SF losers → 3rd place
   { source: 'SF1', sourceResult: 'loser', target: '3P', targetSlot: 'p1' },
   { source: 'SF2', sourceResult: 'loser', target: '3P', targetSlot: 'p2' },
-  // Consolation pool top 2 → ConF
-  { source: 'ConRR.main', sourceResult: 'top1', target: 'ConF', targetSlot: 'p1' },
-  { source: 'ConRR.main', sourceResult: 'top2', target: 'ConF', targetSlot: 'p2' },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -102,9 +104,7 @@ export const BRACKET_WIRING: Record<string, EventWiring> = {
 // return all wiring rules that depend on that result.
 // Client passes these to complete_match RPC's downstream_updates parameter.
 //
-// `result` is restricted to 'winner' | 'loser' here because match completion
-// only produces a winner and a loser. 'top1' / 'top2' are pool-final ranks
-// computed by standings logic, not direct match outcomes.
+// `result` is 'winner' or 'loser' — the two outcomes a match completion produces.
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function getDownstreamSlots(

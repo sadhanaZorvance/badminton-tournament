@@ -25,6 +25,7 @@ export type MatchFormat = 'set21' | 'set30' | 'best_of_3x15';
 
 export type MatchRound =
   | 'R1'
+  | 'RR'
   | 'QF'
   | 'SF'
   | 'F'

@@ -169,9 +169,9 @@ function eSingles7Matches(eventId, pm, suffix, isE7) {
 
   // ConRR: round robin of 3 R1 losers
   const conPairs = [
-    ['Loser:R1.1', 'Loser:R1.2'],
-    ['Loser:R1.1', 'Loser:R1.3'],
-    ['Loser:R1.2', 'Loser:R1.3'],
+    ['Loser:R1.2', 'Loser:R1.3'],   // ConRR.1
+    ['Loser:R1.1', 'Loser:R1.2'],   // ConRR.2
+    ['Loser:R1.1', 'Loser:R1.3'],   // ConRR.3
   ];
   conPairs.forEach(([a, b], i) => {
     rows.push({
