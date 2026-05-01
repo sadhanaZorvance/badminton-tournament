@@ -28,18 +28,19 @@ Pipeline: Zorvance Product Development Pipeline — Phase 5
 **Tone:** Regal and exciting on the public site. Same palette, tighter and more utilitarian on admin screens. The lion crest sets the bar — everything should feel worthy of it.
 **Mobile-first:** All screens designed for 390px viewport (iPhone 14 baseline). Touch targets minimum 44px. Thumb zone respected.
 **Memorable detail:** Live match cards have a pulsing gold left border. Champion Board podium cards animate in with a slide-up reveal — Gold card gets a subtle shimmer animation. Nothing else animates.
-**Footer (public site):** "Powered by Zorvance Technology · info@zorvance.com" — fixed below tab bar on all public pages.
+**Footer (public site):** Fixed below tab bar on all public pages. Two-part row: "Powered by Zorvance Technologies Ltd | [envelope icon] info@zorvance.com" (mailto hyperlink). text-[11px], muted slate, email link highlights gold on hover.
 
 ---
 
 ## NAVIGATION STRUCTURE
 
 ### Public Site — /
-Bottom tab bar (4 tabs, thumb-friendly, always visible):
-- Now Playing (default)
+Bottom tab bar (5 tabs, thumb-friendly, always visible):
+- Live (Now Playing, default)
 - Brackets
 - Standings
-- Champion Board
+- Champions (Champion Board)
+- Results (completed matches + search)
 
 ### Court Admin — /ca[secret]
 Linear navigation:
@@ -60,7 +61,8 @@ Header nav links (in addition to Match Picker and Score Entry):
 | S02 | Brackets | Public |
 | S03 | Standings | Public |
 | S04 | Champion Board | Public |
-| S05 | Login | Court Admin, Top Admin |
+| S05 | Results | Public |
+| S06 | Login | Court Admin, Top Admin |
 | S06 | Match Picker | Court Admin, Top Admin |
 | S07 | Score Entry | Court Admin, Top Admin |
 | S08 | Event Control | Top Admin only |
@@ -137,6 +139,8 @@ Total: 9 screens. Every screen maps directly to user stories in REQUIREMENTS.md.
       → tied row tap → tiebreaker expansion inline
   → bottom tab → [S04 Champion Board]
       → cards render as published (Realtime subscription)
+  → bottom tab → [S05 Results]
+      → search box → filter by player name / event / round
 ```
 
 ---
@@ -366,7 +370,46 @@ Cards animate in with slide-up + fade when published (Realtime subscription trig
 
 ---
 
-### S05 — Admin: Login
+### S05 — Public: Results
+
+**Purpose:** Parents look up any completed match result by player name, event, or round.
+**Entry:** Results tab in bottom nav.
+
+**States:**
+
+*Loading:* Skeleton search bar + 4 card skeletons.
+
+*Populated:*
+```
+┌────────────────────────────────────┐
+│ [🔍 Search by player, event…]  [×] │  ← rounded-full search input
+│ 47 results (all completed matches) │  ← live count
+│                                    │
+│ ┌──────────────────────────────┐   │
+│ │ E1 · U11 Boys Singles · Final│   │  ← event + round header
+│ │ Aarav S. (bold)     21–15    │   │  ← winner bold, score gold
+│ │ Nivin                        │   │
+│ └──────────────────────────────┘   │
+│  (more cards...)                   │
+└────────────────────────────────────┘
+```
+
+Sort order: Finals first (phase DESC), then event code ASC, then bracket slot.
+Search: case-insensitive substring against player names, event name, event code, round name, and match format.
+Walkover/Retired: amber badge in card header.
+Handicap: ★ marker on player names.
+
+**Key interactions:**
+- Search box filters in real-time. × button clears.
+- Cards display-only (no tap action needed)
+- Realtime subscription on matches table (same as other tabs)
+- 30s polling fallback
+
+**Backend dependencies:** matches (complete/walkover/retired), players, teams, events
+
+---
+
+### S06 — Admin: Login
 
 **Purpose:** Admin enters name and PIN to access their tier.
 **Entry:** Direct navigation to /ca[secret] or /ta[secret]. Also shown when localStorage session is absent.
@@ -792,7 +835,7 @@ Client-side first, always. Inline error message below the relevant input field. 
 Amber (#F59E0B) background, full width, non-dismissible. Renders between match header and Set 1 input on S07. Text: "★ Handicap match — [Player name] starts each set at 3-0. Enter the FINAL score including the head start." Cannot be scrolled away. Present for every set of the match.
 
 ### Footer (Public site only)
-Fixed below tab bar on all public pages (S01–S04). Small, muted text: "Powered by Zorvance Technology · info@zorvance.com"
+Fixed below tab bar on all public pages (S01–S05). Row below the 5-tab bar: "Powered by Zorvance Technologies Ltd | ✉ info@zorvance.com" — email is a mailto hyperlink, highlights gold on hover. text-[11px], border-t border-white/[0.04] separates from tabs.
 
 ### Refresh Pattern
 Refresh icon (circular arrow) top right of every screen header. On tap: brief rotation animation (CSS, 500ms), re-fetches current view data, updates "Last updated HH:MM" timestamp. Data updates in place — no full page reload. Available on every screen, admin and public.

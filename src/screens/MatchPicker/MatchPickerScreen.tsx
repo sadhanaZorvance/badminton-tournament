@@ -69,6 +69,7 @@ export default function MatchPickerScreen({ basePath, loginPath }: MatchPickerSc
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
   const [selectedCourt, setSelectedCourt] = useState<CourtFilter>('All');
+  const [searchQuery, setSearchQuery] = useState('');
 
   const [pendingStart, setPendingStart] = useState<{
     match: Match;
@@ -182,6 +183,26 @@ export default function MatchPickerScreen({ basePath, loginPath }: MatchPickerSc
     if (selectedCourt === 'All') return inProgressMatches;
     return inProgressMatches.filter((m) => m.court === selectedCourt);
   }, [inProgressMatches, selectedCourt]);
+
+  const filteredReadyMatches = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return readyMatches;
+    return readyMatches.filter((m) => {
+      const ev = eventById.get(m.event_id);
+      const p1 = m.p1_id
+        ? (m.p1_type === 'team' ? teamById.get(m.p1_id)?.name : playerById.get(m.p1_id)?.name) ?? m.p1_ref ?? 'TBD'
+        : 'TBD';
+      const p2 = m.p2_id
+        ? (m.p2_type === 'team' ? teamById.get(m.p2_id)?.name : playerById.get(m.p2_id)?.name) ?? m.p2_ref ?? 'TBD'
+        : 'TBD';
+      const text = [
+        ev?.name ?? '', ev?.code ?? '',
+        p1, p2,
+        m.round, m.match_format, m.bracket_slot ?? '',
+      ].join(' ').toLowerCase();
+      return text.includes(q);
+    });
+  }, [readyMatches, searchQuery, eventById, playerById, teamById]);
 
   const courtOccupancy = useMemo(() => {
     const map = new Map<string, Match>();
@@ -361,15 +382,57 @@ export default function MatchPickerScreen({ basePath, loginPath }: MatchPickerSc
                 Ready to Start
               </h2>
 
+              {/* Search */}
+              <div className="relative mb-3">
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate pointer-events-none"
+                  aria-hidden="true"
+                >
+                  <circle cx="11" cy="11" r="7" />
+                  <path d="M20 20l-3-3" />
+                </svg>
+                <input
+                  type="search"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search by player, event or format…"
+                  className="w-full rounded-full bg-navy-light/60 border border-navy-light pl-9 pr-10 py-2 font-body text-sm text-white placeholder:text-slate/50 focus:outline-none focus:border-gold/50 transition-colors min-h-[44px]"
+                  aria-label="Search ready matches"
+                />
+                {searchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchQuery('')}
+                    aria-label="Clear search"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 flex items-center justify-center rounded-full bg-slate/20 text-slate hover:text-white transition-colors text-sm leading-none"
+                  >
+                    ×
+                  </button>
+                )}
+              </div>
+
               {readyMatches.length === 0 ? (
                 <div className="rounded-lg bg-navy-light/40 border border-navy-light px-4 py-8 text-center">
                   <p className="font-body text-slate-light text-sm">
                     No matches ready — check back soon
                   </p>
                 </div>
+              ) : filteredReadyMatches.length === 0 ? (
+                <div className="rounded-lg bg-navy-light/40 border border-navy-light px-4 py-8 text-center">
+                  <p className="font-body text-slate-light text-sm">
+                    No matches match "{searchQuery}"
+                  </p>
+                </div>
               ) : (
                 <div className="space-y-3">
-                  {readyMatches.map((match) => {
+                  {filteredReadyMatches.map((match) => {
                     const p1 = nameFor(match.p1_id, match.p1_type, match.p1_ref);
                     const p2 = nameFor(match.p2_id, match.p2_type, match.p2_ref);
                     const startDisabled = selectedCourt === 'All' || starting;

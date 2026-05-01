@@ -5,6 +5,7 @@ import StandingsScreen from '../Standings/StandingsScreen';
 import BracketsTab from './BracketsTab';
 import ChampionBoardTab from './ChampionBoardTab';
 import NowPlayingTab from './NowPlayingTab';
+import ResultsTab from './ResultsTab';
 
 export default function PublicSiteScreen() {
   const [activeTab, setActiveTab] = useState<PublicTab>('now-playing');
@@ -28,6 +29,7 @@ export default function PublicSiteScreen() {
       {activeTab === 'brackets' && <BracketsTab refreshTick={refreshTick} />}
       {activeTab === 'standings' && <StandingsScreen key={refreshTick} />}
       {activeTab === 'champion-board' && <ChampionBoardTab refreshTick={refreshTick} />}
+      {activeTab === 'results' && <ResultsTab refreshTick={refreshTick} />}
     </PublicShell>
   );
 }

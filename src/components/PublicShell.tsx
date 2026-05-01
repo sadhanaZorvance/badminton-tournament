@@ -52,7 +52,7 @@ export default function PublicShell({
         </div>
       </header>
 
-      <main className="flex-1 max-w-5xl w-full mx-auto px-4 py-4 pb-[calc(5.5rem+env(safe-area-inset-bottom))] overflow-y-auto">
+      <main className="flex-1 max-w-5xl w-full mx-auto px-4 py-4 pb-[calc(8rem+env(safe-area-inset-bottom))] overflow-y-auto">
         {children}
       </main>
 
