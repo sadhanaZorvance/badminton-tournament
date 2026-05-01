@@ -3,16 +3,8 @@ import PublicShell from '../../components/PublicShell';
 import type { PublicTab } from '../../components/BottomTabBar';
 import StandingsScreen from '../Standings/StandingsScreen';
 import BracketsTab from './BracketsTab';
+import ChampionBoardTab from './ChampionBoardTab';
 import NowPlayingTab from './NowPlayingTab';
-
-function ComingSoon({ name }: { name: string }) {
-  return (
-    <div className="rounded-lg bg-navy-light/40 border border-navy-light px-4 py-12 text-center">
-      <h2 className="font-display text-2xl text-gold-bright mb-2">{name}</h2>
-      <p className="font-body text-slate">Coming soon</p>
-    </div>
-  );
-}
 
 export default function PublicSiteScreen() {
   const [activeTab, setActiveTab] = useState<PublicTab>('now-playing');
@@ -35,7 +27,7 @@ export default function PublicSiteScreen() {
       {activeTab === 'now-playing' && <NowPlayingTab refreshTick={refreshTick} />}
       {activeTab === 'brackets' && <BracketsTab refreshTick={refreshTick} />}
       {activeTab === 'standings' && <StandingsScreen key={refreshTick} />}
-      {activeTab === 'champion-board' && <ComingSoon name="Champion Board" />}
+      {activeTab === 'champion-board' && <ChampionBoardTab refreshTick={refreshTick} />}
     </PublicShell>
   );
 }
