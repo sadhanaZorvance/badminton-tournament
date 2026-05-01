@@ -412,11 +412,11 @@ Bracket wiring is a static JSON config loaded at app start. One config object pe
 {
   event: "E3",
   wiring: [
-    { source: "R1.1", sourceResult: "winner", target: "SF1", targetSlot: "p1" },
+    { source: "R1.1", sourceResult: "winner", target: "SF1", targetSlot: "p2" },
     { source: "R1.1", sourceResult: "loser",  target: "ConRR.main", targetSlot: "slot1" },
-    { source: "R1.2", sourceResult: "winner", target: "SF1", targetSlot: "p2" },
+    { source: "R1.2", sourceResult: "winner", target: "SF2", targetSlot: "p1" },
     { source: "R1.2", sourceResult: "loser",  target: "ConRR.main", targetSlot: "slot2" },
-    { source: "R1.3", sourceResult: "winner", target: "SF2", targetSlot: "p1" },
+    { source: "R1.3", sourceResult: "winner", target: "SF2", targetSlot: "p2" },
     { source: "R1.3", sourceResult: "loser",  target: "ConRR.main", targetSlot: "slot3" },
     { source: "SF1",  sourceResult: "winner", target: "F",   targetSlot: "p1" },
     { source: "SF1",  sourceResult: "loser",  target: "3P",  targetSlot: "p1" },

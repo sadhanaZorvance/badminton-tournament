@@ -57,10 +57,12 @@ const E1_WIRING: WiringRule[] = [
 // ─────────────────────────────────────────────────────────────────────────────
 
 const STANDARD_BRACKET_WIRING: WiringRule[] = [
-  // R1 winners → SF
-  { source: 'R1.1', sourceResult: 'winner', target: 'SF1', targetSlot: 'p1' },
-  { source: 'R1.2', sourceResult: 'winner', target: 'SF1', targetSlot: 'p2' },
-  { source: 'R1.3', sourceResult: 'winner', target: 'SF2', targetSlot: 'p1' },
+  // R1 winners → SF.
+  // SF1.p1 is occupied by the bye holder (T1/P1) at seed time — no wiring rule needed for it.
+  // R1.1 winner fills SF1.p2; R1.2 and R1.3 winners fill SF2.
+  { source: 'R1.1', sourceResult: 'winner', target: 'SF1', targetSlot: 'p2' },
+  { source: 'R1.2', sourceResult: 'winner', target: 'SF2', targetSlot: 'p1' },
+  { source: 'R1.3', sourceResult: 'winner', target: 'SF2', targetSlot: 'p2' },
   // R1 losers → consolation pool slots
   { source: 'R1.1', sourceResult: 'loser', target: 'ConRR.main', targetSlot: 'slot1' },
   { source: 'R1.2', sourceResult: 'loser', target: 'ConRR.main', targetSlot: 'slot2' },
