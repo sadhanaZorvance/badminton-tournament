@@ -77,12 +77,6 @@ function EventInfoBar({ event }: { event: Event }) {
       <p className="font-body text-[10px] text-slate leading-relaxed">
         {getEventFormatRules(event)}
       </p>
-      {event.handicap_rule && (
-        <p className="font-body text-[10px] text-amber-warning flex items-center gap-1">
-          <span aria-hidden="true">★</span>
-          <span>Handicap · both players start each set at 3–0</span>
-        </p>
-      )}
     </div>
   );
 }
@@ -535,7 +529,7 @@ function BracketCell({ match, playerMap, teamMap, onClick }: BracketCellProps) {
         isWinner={winnerIsP1}
         isLoser={isCompleted && !winnerIsP1}
         isPending={isPending}
-        handicap={match.handicap_applied}
+        handicap={false}
       />
       <PlayerRow
         name={p2Name}
@@ -543,7 +537,7 @@ function BracketCell({ match, playerMap, teamMap, onClick }: BracketCellProps) {
         isWinner={winnerIsP2}
         isLoser={isCompleted && !winnerIsP2}
         isPending={isPending}
-        handicap={match.handicap_applied}
+        handicap={false}
       />
     </button>
   );
@@ -1014,25 +1008,12 @@ function MatchScoreModal({
           <div className="flex items-center justify-between gap-3">
             <span className="font-body text-base text-white truncate">
               {p1Name}
-              {match.handicap_applied && (
-                <span className="text-amber-warning ml-1">★</span>
-              )}
             </span>
             <span className="font-body text-slate text-sm">vs</span>
             <span className="font-body text-base text-white truncate text-right">
               {p2Name}
-              {match.handicap_applied && (
-                <span className="text-amber-warning ml-1">★</span>
-              )}
             </span>
           </div>
-
-          {match.handicap_applied && (
-            <p className="text-xs font-body text-amber-warning bg-amber-warning/10 border border-amber-warning/30 rounded-md px-3 py-2">
-              ★ Handicap match — head start applied. Scores shown include the head
-              start.
-            </p>
-          )}
 
           {sets.length > 0 ? (
             <ul className="space-y-1.5">
