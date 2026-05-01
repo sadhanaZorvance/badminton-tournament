@@ -48,8 +48,8 @@ Linear navigation:
 
 ### Top Admin — /ta[secret]
 Header nav links (in addition to Match Picker and Score Entry):
-- Event Control
-- Champion Board Admin
+- Event Control (always visible — including mobile, styled as gold pill button)
+- Champion Board Admin (route exists at /champion-board but not linked from nav — escape hatch only)
 
 ---
 

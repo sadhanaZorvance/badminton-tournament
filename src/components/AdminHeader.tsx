@@ -70,18 +70,12 @@ export default function AdminHeader({
         </span>
 
         {isTopAdmin && (
-          <nav className="ml-4 hidden sm:flex items-center gap-4">
+          <nav className="ml-4 flex items-center">
             <Link
               to={withDemoQuery(`${basePath}/event-control`)}
-              className="text-slate hover:text-gold-bright text-sm font-body"
+              className="px-2.5 py-1 rounded-md bg-gold/10 text-gold-bright hover:bg-gold/20 text-sm font-body transition-colors"
             >
               Event Control
-            </Link>
-            <Link
-              to={withDemoQuery(`${basePath}/champion-board`)}
-              className="text-slate hover:text-gold-bright text-sm font-body"
-            >
-              Champion Board
             </Link>
           </nav>
         )}

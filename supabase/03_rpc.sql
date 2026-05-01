@@ -109,15 +109,15 @@ end;
 $$;
 
 -- ──────────────────────────────────────────────────────────────────────────
--- _maybe_draft_podium  (private helper)
--- If every match in the event is in a terminal state, insert a draft podium
--- with gold/silver/bronze derived from bracket slots F and 3P (knockouts) and
--- consolation_winner from ConF. RR events get a draft row with nulls — Top
--- Admin assigns gold/silver/bronze in the UI before publishing.
+-- _maybe_update_podium  (private helper)
+-- Derives podium positions from completed bracket slots (F, 3P, ConF) and
+-- auto-publishes each position as it becomes known — no manual publish step
+-- needed. Positions are updated independently: 3P can publish bronze before
+-- the Final completes, and ConF publishes consolation winner separately.
+-- Also sets event.status='complete' when all matches are terminal.
 -- ──────────────────────────────────────────────────────────────────────────
-create or replace function public._maybe_draft_podium(
-  p_event_id   uuid,
-  p_admin_name text
+create or replace function public._maybe_update_podium(
+  p_event_id uuid
 )
 returns boolean
 language plpgsql
@@ -125,8 +125,6 @@ security definer
 set search_path = public
 as $$
 declare
-  v_outstanding int;
-  v_existing    int;
   v_final       record;
   v_third       record;
   v_confinal    record;
@@ -137,29 +135,15 @@ declare
   v_bronze_id   uuid;
   v_bronze_type entrant_type_t;
   v_con_id      uuid;
+  v_any_known   boolean;
+  v_outstanding int;
 begin
-  -- Outstanding = any non-terminal match in the event.
-  select count(*) into v_outstanding
-    from public.matches
-   where event_id = p_event_id
-     and status not in ('complete','walkover','retired');
-
-  if v_outstanding > 0 then
-    return false;
-  end if;
-
-  -- Already drafted?
-  select count(*) into v_existing
-    from public.podiums where event_id = p_event_id;
-  if v_existing > 0 then
-    return false;
-  end if;
-
   -- Final → gold + silver
   select winner_id, winner_type, p1_id, p2_id, p1_type, p2_type
     into v_final
     from public.matches
    where event_id = p_event_id and bracket_slot = 'F'
+     and status in ('complete','walkover')
    limit 1;
 
   if v_final.winner_id is not null then
@@ -178,6 +162,7 @@ begin
   select winner_id, winner_type into v_third
     from public.matches
    where event_id = p_event_id and bracket_slot = '3P'
+     and status in ('complete','walkover')
    limit 1;
 
   if v_third.winner_id is not null then
@@ -189,41 +174,56 @@ begin
   select winner_id into v_confinal
     from public.matches
    where event_id = p_event_id and bracket_slot = 'ConF'
+     and status in ('complete','walkover')
    limit 1;
 
   if v_confinal.winner_id is not null then
     v_con_id := v_confinal.winner_id;
   end if;
 
-  insert into public.podiums (
-    event_id, gold_id, gold_type,
-    silver_id, silver_type,
-    bronze_id, bronze_type,
-    consolation_winner_id, status
-  ) values (
-    p_event_id, v_gold_id, v_gold_type,
-    v_silver_id, v_silver_type,
-    v_bronze_id, v_bronze_type,
-    v_con_id, 'draft'
-  );
+  v_any_known := (v_gold_id is not null or v_bronze_id is not null or v_con_id is not null);
 
-  -- Reflect "complete" on the event (Top Admin will publish).
-  update public.events set status = 'complete' where id = p_event_id and status <> 'published';
-
-  insert into public.audit_log (action_type, event_id, actor_name, payload)
-  values (
-    'podium_drafted',
-    p_event_id,
-    p_admin_name,
-    jsonb_build_object(
-      'gold_id', v_gold_id,
-      'silver_id', v_silver_id,
-      'bronze_id', v_bronze_id,
-      'consolation_winner_id', v_con_id
+  if v_any_known then
+    insert into public.podiums (
+      event_id, gold_id, gold_type,
+      silver_id, silver_type,
+      bronze_id, bronze_type,
+      consolation_winner_id, status,
+      published_by, published_at
+    ) values (
+      p_event_id, v_gold_id, v_gold_type,
+      v_silver_id, v_silver_type,
+      v_bronze_id, v_bronze_type,
+      v_con_id, 'published',
+      'system', now()
     )
-  );
+    on conflict (event_id) do update set
+      gold_id               = excluded.gold_id,
+      gold_type             = excluded.gold_type,
+      silver_id             = excluded.silver_id,
+      silver_type           = excluded.silver_type,
+      bronze_id             = excluded.bronze_id,
+      bronze_type           = excluded.bronze_type,
+      consolation_winner_id = excluded.consolation_winner_id,
+      status                = 'published',
+      published_by          = 'system',
+      published_at          = coalesce(podiums.published_at, now());
+  else
+    -- No bracket positions known: revert existing row to draft so it hides on public board
+    update public.podiums set status = 'draft' where event_id = p_event_id;
+  end if;
 
-  return true;
+  -- Update event to complete when all matches are terminal
+  select count(*) into v_outstanding
+    from public.matches
+   where event_id = p_event_id
+     and status not in ('complete','walkover','retired');
+
+  if v_outstanding = 0 then
+    update public.events set status = 'complete' where id = p_event_id and status <> 'published';
+  end if;
+
+  return v_any_known;
 end;
 $$;
 
@@ -546,7 +546,7 @@ begin
     )
   );
 
-  v_podium_drafted := public._maybe_draft_podium(v_match.event_id, p_admin_name);
+  v_podium_drafted := public._maybe_update_podium(v_match.event_id);
 
   return jsonb_build_object(
     'success',            true,
@@ -629,7 +629,7 @@ begin
     )
   );
 
-  v_podium_drafted := public._maybe_draft_podium(v_match.event_id, p_admin_name);
+  v_podium_drafted := public._maybe_update_podium(v_match.event_id);
 
   return jsonb_build_object(
     'success', true,
@@ -752,7 +752,7 @@ begin
     jsonb_build_object('winner_id', p_winner_id, 'partial_sets', p_partial_sets)
   );
 
-  v_podium_drafted := public._maybe_draft_podium(v_match.event_id, p_admin_name);
+  v_podium_drafted := public._maybe_update_podium(v_match.event_id);
 
   return jsonb_build_object(
     'success', true,
@@ -914,6 +914,9 @@ begin
       )
     );
   end if;
+
+  -- Re-derive podium in case F/3P/ConF result changed
+  perform public._maybe_update_podium(v_match.event_id);
 
   return jsonb_build_object(
     'success',            true,
