@@ -1477,6 +1477,61 @@ $$;
 grant execute on function public.unpublish_podium(uuid,text) to anon, authenticated;
 
 -- ──────────────────────────────────────────────────────────────────────────
+-- release_match
+-- Return a wrongly-started in_progress match to ready status.
+-- Only valid when no sets have been entered yet (escape hatch — no scores).
+-- ──────────────────────────────────────────────────────────────────────────
+create or replace function public.release_match(
+  p_match_id   uuid,
+  p_admin_name text
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_match     record;
+  v_set_count int;
+begin
+  if p_admin_name is null or length(trim(p_admin_name)) = 0 then
+    raise exception 'INVALID_ADMIN_NAME: admin name required';
+  end if;
+
+  select * into v_match from public.matches where id = p_match_id;
+  if not found then
+    raise exception 'MATCH_NOT_FOUND: %', p_match_id;
+  end if;
+
+  if v_match.status <> 'in_progress' then
+    raise exception 'MATCH_NOT_IN_PROGRESS: status=%', v_match.status;
+  end if;
+
+  select count(*) into v_set_count from public.sets where match_id = p_match_id;
+  if v_set_count > 0 then
+    raise exception 'SETS_ALREADY_ENTERED: cannot release a match after scores have been saved';
+  end if;
+
+  update public.matches
+     set status     = 'ready',
+         court      = null,
+         started_at = null,
+         started_by = null
+   where id = p_match_id;
+
+  insert into public.audit_log (action_type, match_id, event_id, actor_name, payload)
+  values (
+    'match_released', p_match_id, v_match.event_id, p_admin_name,
+    jsonb_build_object('reason', 'wrong_match_started')
+  );
+
+  return jsonb_build_object('success', true);
+end;
+$$;
+
+grant execute on function public.release_match(uuid,text) to anon, authenticated;
+
+-- ──────────────────────────────────────────────────────────────────────────
 -- reset_tournament  (DEMO ONLY — gated at application level)
 -- Wipes runtime data, restores matches to seeded state.
 -- The "seeded state" is reconstructed by:

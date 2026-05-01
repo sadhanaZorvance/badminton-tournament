@@ -368,21 +368,18 @@ export default function ScoreEntryScreen({ basePath, loginPath }: ScoreEntryScre
     setReleaseError(null);
     setReleasing(true);
     try {
-      const { error: updateError } = await supabase
-        .from('matches')
-        .update({ status: 'ready', court: null })
-        .eq('id', match.id)
-        .eq('status', 'in_progress');
-      if (updateError) throw updateError;
-      await supabase.from('audit_log').insert({
-        match_id: match.id,
-        action_type: 'match_released',
-        actor_name: adminName,
-        payload: { reason: 'wrong_match_started' },
+      const { error: rpcError } = await supabase.rpc('release_match', {
+        p_match_id: match.id,
+        p_admin_name: adminName,
       });
+      if (rpcError) {
+        setReleaseError(rpcErrorMessage(rpcError.message, 'Could not release match'));
+        return;
+      }
       navigate(withDemoQuery(`${basePath}/picker`));
     } catch (err) {
       setReleaseError(err instanceof Error ? err.message : 'Could not release match');
+    } finally {
       setReleasing(false);
     }
   }
