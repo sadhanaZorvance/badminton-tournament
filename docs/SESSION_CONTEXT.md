@@ -110,5 +110,35 @@ src/types/index.ts             MatchRound includes 'RR' now
 - Demo-mode end-to-end test (from HANDOFF_FIX_CONSOLATION_STANDINGS.md bottom section) not yet run
 - Any bugs discovered after matches are confirmed good → fix here, note below
 
+---
+
+## Changes — May 2026 (mobile nav + auto-publish podiums)
+
+### Fix A — AdminHeader.tsx mobile nav
+- `hidden sm:flex` removed from Top Admin nav; Event Control link now always visible
+- Champion Board link removed from nav (route `/champion-board` kept as escape hatch)
+- Event Control styled as gold pill button (`bg-gold/10 text-gold-bright`) for visibility
+
+### Fix B — Auto-publish partial podiums (_maybe_update_podium)
+- Replaced `_maybe_draft_podium(event_id, admin_name)` with `_maybe_update_podium(event_id)`
+- New function: no "all matches terminal" gate; derives F/3P/ConF positions independently
+- UPSERTs podium row as each bracket position is determined; status='published' immediately
+- If all positions null (e.g. cascade reset Final): row reverts to 'draft' (hides on public board)
+- event.status='complete' still fires only when all matches terminal (unchanged)
+- cascade_edit_match now calls `_maybe_update_podium` so edits to F/3P/ConF auto-refresh podium
+
+### Fix C — E6/E8 auto-publish (supabase/03_rpc.sql)
+- **E6 (pure RR, no playoff matches)**: `_maybe_update_podium` now has a pure-RR branch.
+  When `v_outstanding=0` + no F/3P/ConF bracket slots exist + `format_type='rr'` → computes
+  standings (wins DESC, point_diff DESC) from all RR matches → sets gold/silver/bronze → publishes.
+- **E8 (RR then playoffs)**: New `_maybe_create_rr_playoffs(event_id)` function.
+  E8-only, idempotent (checks bracket_slot='F' existence). When all 10 RR matches are terminal →
+  computes standings → inserts F match (best_of_3x15, 1st vs 2nd, ready) and 3P match (set30,
+  3rd vs 4th, ready). Called BEFORE `_maybe_update_podium` in complete_match, record_walkover,
+  record_retirement. After F/3P complete, `_maybe_update_podium` normal bracket-slot branch fires.
+- `_maybe_update_podium` `v_outstanding` computation moved to top of function (used in RR branch).
+- Standings CTE: `entrants` union from p1_id/p2_id; `match_scores` sums score_sets jsonb;
+  `standings_agg` left-joins wins + point_diff; ordered by wins DESC, point_diff DESC.
+
 ### Remaining bugs (if any — fill in as discovered)
 _None logged yet._

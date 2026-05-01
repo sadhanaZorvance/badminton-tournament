@@ -125,19 +125,29 @@ security definer
 set search_path = public
 as $$
 declare
-  v_final       record;
-  v_third       record;
-  v_confinal    record;
-  v_gold_id     uuid;
-  v_gold_type   entrant_type_t;
-  v_silver_id   uuid;
-  v_silver_type entrant_type_t;
-  v_bronze_id   uuid;
-  v_bronze_type entrant_type_t;
-  v_con_id      uuid;
-  v_any_known   boolean;
-  v_outstanding int;
+  v_event_code    text;
+  v_event_format  text;
+  v_final         record;
+  v_third         record;
+  v_confinal      record;
+  v_gold_id       uuid;
+  v_gold_type     entrant_type_t;
+  v_silver_id     uuid;
+  v_silver_type   entrant_type_t;
+  v_bronze_id     uuid;
+  v_bronze_type   entrant_type_t;
+  v_con_id        uuid;
+  v_any_known     boolean;
+  v_outstanding   int;
+  v_rr_rank       int;
+  v_standings_row record;
 begin
+  -- Compute outstanding count early (needed for RR standings branch)
+  select count(*) into v_outstanding
+    from public.matches
+   where event_id = p_event_id
+     and status not in ('complete','walkover','retired');
+
   -- Final → gold + silver
   select winner_id, winner_type, p1_id, p2_id, p1_type, p2_type
     into v_final
@@ -183,6 +193,73 @@ begin
 
   v_any_known := (v_gold_id is not null or v_bronze_id is not null or v_con_id is not null);
 
+  -- Pure RR branch: derive podium from standings when all matches done and no bracket winners yet
+  if not v_any_known and v_outstanding = 0 then
+    select e.code, e.format_type into v_event_code, v_event_format
+      from public.events e where e.id = p_event_id;
+
+    if v_event_format = 'rr'
+       and not exists (
+         select 1 from public.matches
+          where event_id = p_event_id
+            and bracket_slot in ('F','3P','ConF')
+       )
+    then
+      v_rr_rank := 0;
+      for v_standings_row in
+        with entrants as (
+          select distinct p1_id as entrant_id, p1_type as entrant_type
+            from public.matches
+           where event_id = p_event_id and round = 'RR' and p1_id is not null
+          union
+          select distinct p2_id, p2_type
+            from public.matches
+           where event_id = p_event_id and round = 'RR' and p2_id is not null
+        ),
+        match_scores as (
+          select
+            m.p1_id, m.p2_id, m.winner_id,
+            coalesce((select sum((el->>'p1')::int) from jsonb_array_elements(m.score_sets) el), 0) as p1_pf,
+            coalesce((select sum((el->>'p2')::int) from jsonb_array_elements(m.score_sets) el), 0) as p2_pf
+          from public.matches m
+         where m.event_id = p_event_id
+           and m.round = 'RR'
+           and m.status in ('complete','walkover','retired')
+        ),
+        standings_agg as (
+          select
+            e.entrant_id,
+            e.entrant_type,
+            count(*) filter (where ms.winner_id = e.entrant_id) as wins,
+            coalesce(sum(
+              case when ms.p1_id = e.entrant_id then ms.p1_pf - ms.p2_pf
+                   else ms.p2_pf - ms.p1_pf end
+            ), 0) as point_diff
+          from entrants e
+          left join match_scores ms on (ms.p1_id = e.entrant_id or ms.p2_id = e.entrant_id)
+          group by e.entrant_id, e.entrant_type
+          order by wins desc, point_diff desc
+        )
+        select * from standings_agg
+      loop
+        v_rr_rank := v_rr_rank + 1;
+        if v_rr_rank = 1 then
+          v_gold_id     := v_standings_row.entrant_id;
+          v_gold_type   := v_standings_row.entrant_type;
+        elsif v_rr_rank = 2 then
+          v_silver_id   := v_standings_row.entrant_id;
+          v_silver_type := v_standings_row.entrant_type;
+        elsif v_rr_rank = 3 then
+          v_bronze_id   := v_standings_row.entrant_id;
+          v_bronze_type := v_standings_row.entrant_type;
+        else
+          exit;
+        end if;
+      end loop;
+      v_any_known := (v_gold_id is not null);
+    end if;
+  end if;
+
   if v_any_known then
     insert into public.podiums (
       event_id, gold_id, gold_type,
@@ -214,11 +291,6 @@ begin
   end if;
 
   -- Update event to complete when all matches are terminal
-  select count(*) into v_outstanding
-    from public.matches
-   where event_id = p_event_id
-     and status not in ('complete','walkover','retired');
-
   if v_outstanding = 0 then
     update public.events set status = 'complete' where id = p_event_id and status <> 'published';
   end if;
@@ -226,6 +298,129 @@ begin
   return v_any_known;
 end;
 $$;
+
+-- ──────────────────────────────────────────────────────────────────────────
+-- _maybe_create_rr_playoffs
+-- E8-only: when all RR matches are terminal and no Final exists yet,
+-- compute standings and insert F (best_of_3x15) and 3P (set30) matches.
+-- Idempotent — safe to call multiple times.
+-- ──────────────────────────────────────────────────────────────────────────
+drop function if exists public._maybe_create_rr_playoffs(uuid);
+create or replace function public._maybe_create_rr_playoffs(p_event_id uuid)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_event_code    text;
+  v_outstanding   int;
+  v_rr_rank       int;
+  v_standings_row record;
+  v_rank1_id      uuid;  v_rank1_type entrant_type_t;
+  v_rank2_id      uuid;  v_rank2_type entrant_type_t;
+  v_rank3_id      uuid;  v_rank3_type entrant_type_t;
+  v_rank4_id      uuid;  v_rank4_type entrant_type_t;
+begin
+  select code into v_event_code from public.events where id = p_event_id;
+  if v_event_code <> 'E8' then return false; end if;
+
+  -- Idempotent: F already created
+  if exists (select 1 from public.matches where event_id = p_event_id and bracket_slot = 'F') then
+    return false;
+  end if;
+
+  -- All RR matches must be terminal
+  select count(*) into v_outstanding
+    from public.matches
+   where event_id = p_event_id
+     and round = 'RR'
+     and status not in ('complete','walkover','retired');
+
+  if v_outstanding > 0 then return false; end if;
+
+  -- Compute standings from completed RR matches
+  v_rr_rank := 0;
+  for v_standings_row in
+    with entrants as (
+      select distinct p1_id as entrant_id, p1_type as entrant_type
+        from public.matches
+       where event_id = p_event_id and round = 'RR' and p1_id is not null
+      union
+      select distinct p2_id, p2_type
+        from public.matches
+       where event_id = p_event_id and round = 'RR' and p2_id is not null
+    ),
+    match_scores as (
+      select
+        m.p1_id, m.p2_id, m.winner_id,
+        coalesce((select sum((el->>'p1')::int) from jsonb_array_elements(m.score_sets) el), 0) as p1_pf,
+        coalesce((select sum((el->>'p2')::int) from jsonb_array_elements(m.score_sets) el), 0) as p2_pf
+      from public.matches m
+     where m.event_id = p_event_id
+       and m.round = 'RR'
+       and m.status in ('complete','walkover','retired')
+    ),
+    standings_agg as (
+      select
+        e.entrant_id,
+        e.entrant_type,
+        count(*) filter (where ms.winner_id = e.entrant_id) as wins,
+        coalesce(sum(
+          case when ms.p1_id = e.entrant_id then ms.p1_pf - ms.p2_pf
+               else ms.p2_pf - ms.p1_pf end
+        ), 0) as point_diff
+      from entrants e
+      left join match_scores ms on (ms.p1_id = e.entrant_id or ms.p2_id = e.entrant_id)
+      group by e.entrant_id, e.entrant_type
+      order by wins desc, point_diff desc
+    )
+    select * from standings_agg
+  loop
+    v_rr_rank := v_rr_rank + 1;
+    if    v_rr_rank = 1 then v_rank1_id := v_standings_row.entrant_id; v_rank1_type := v_standings_row.entrant_type;
+    elsif v_rr_rank = 2 then v_rank2_id := v_standings_row.entrant_id; v_rank2_type := v_standings_row.entrant_type;
+    elsif v_rr_rank = 3 then v_rank3_id := v_standings_row.entrant_id; v_rank3_type := v_standings_row.entrant_type;
+    elsif v_rr_rank = 4 then v_rank4_id := v_standings_row.entrant_id; v_rank4_type := v_standings_row.entrant_type;
+    else exit;
+    end if;
+  end loop;
+
+  if v_rank1_id is null or v_rank2_id is null then return false; end if;
+
+  -- Final: 1st vs 2nd
+  insert into public.matches (
+    event_id, round, bracket_slot, match_format,
+    p1_id, p1_type, p1_ref,
+    p2_id, p2_type, p2_ref,
+    status
+  ) values (
+    p_event_id, 'F', 'F', 'best_of_3x15',
+    v_rank1_id, v_rank1_type, 'Rank1:RR',
+    v_rank2_id, v_rank2_type, 'Rank2:RR',
+    'ready'
+  );
+
+  -- 3rd place: 3rd vs 4th (only if both ranked)
+  if v_rank3_id is not null and v_rank4_id is not null then
+    insert into public.matches (
+      event_id, round, bracket_slot, match_format,
+      p1_id, p1_type, p1_ref,
+      p2_id, p2_type, p2_ref,
+      status
+    ) values (
+      p_event_id, '3P', '3P', 'set30',
+      v_rank3_id, v_rank3_type, 'Rank3:RR',
+      v_rank4_id, v_rank4_type, 'Rank4:RR',
+      'ready'
+    );
+  end if;
+
+  return true;
+end;
+$$;
+
+grant execute on function public._maybe_create_rr_playoffs(uuid) to anon, authenticated;
 
 -- ──────────────────────────────────────────────────────────────────────────
 -- start_match
@@ -546,6 +741,7 @@ begin
     )
   );
 
+  perform public._maybe_create_rr_playoffs(v_match.event_id);
   v_podium_drafted := public._maybe_update_podium(v_match.event_id);
 
   return jsonb_build_object(
@@ -629,6 +825,7 @@ begin
     )
   );
 
+  perform public._maybe_create_rr_playoffs(v_match.event_id);
   v_podium_drafted := public._maybe_update_podium(v_match.event_id);
 
   return jsonb_build_object(
@@ -752,6 +949,7 @@ begin
     jsonb_build_object('winner_id', p_winner_id, 'partial_sets', p_partial_sets)
   );
 
+  perform public._maybe_create_rr_playoffs(v_match.event_id);
   v_podium_drafted := public._maybe_update_podium(v_match.event_id);
 
   return jsonb_build_object(
