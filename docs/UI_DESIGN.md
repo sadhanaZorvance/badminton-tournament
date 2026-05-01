@@ -322,12 +322,11 @@ Three-way circular tie (EC-012): all tied rows highlighted amber. Note below tab
 ┌─────────────────────────────┐
 │ Champion Board          🔄  │
 │                             │
-│         🏆                  │
+│         🏆                  │  ← line-art trophy icon, gold
 │   Champions will appear     │
 │   here as events conclude   │
 │                             │
-│   Check back as the         │
-│   day progresses            │
+│      Smash Your Limits      │  ← muted, italic tagline
 └─────────────────────────────┘
 ```
 
