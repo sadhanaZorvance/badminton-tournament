@@ -45,7 +45,7 @@ export default function MatchCard({
   if (variant === 'live') {
     return (
       <Wrapper {...wrapperProps}>
-        <div className="relative rounded-lg bg-navy-light border border-navy-light pl-4 pr-4 py-3 animate-pulse-gold overflow-hidden">
+        <div className="relative rounded-lg bg-navy-light border border-white/[0.08] pl-4 pr-4 py-3 animate-pulse-gold shadow-glass-live overflow-hidden">
           <span
             aria-hidden="true"
             className="absolute left-0 top-0 bottom-0 w-1 bg-gold-bright"
@@ -119,7 +119,7 @@ export default function MatchCard({
   if (variant === 'ready') {
     return (
       <Wrapper {...wrapperProps}>
-        <div className="rounded-lg bg-navy-light/60 border border-navy-light px-4 py-3 hover:bg-navy-light transition-colors">
+        <div className="rounded-lg bg-navy-light/70 border border-white/[0.07] px-4 py-3 hover:bg-navy-light transition-colors shadow-glass">
           <div className="flex items-center justify-between mb-2 gap-2">
             <div className="flex items-center gap-2 min-w-0">
               <span className="text-xs font-body text-slate uppercase tracking-wider truncate">
@@ -151,7 +151,7 @@ export default function MatchCard({
   // compact
   return (
     <Wrapper {...wrapperProps}>
-      <div className="flex items-center gap-3 px-3 py-2 rounded-md bg-navy-light/40 hover:bg-navy-light transition-colors text-sm font-body">
+      <div className="flex items-center gap-3 px-3 py-2 rounded-md bg-navy-light/60 border border-white/[0.06] hover:bg-navy-light transition-colors text-sm font-body shadow-glass">
         <span className="text-slate text-xs uppercase tracking-wider w-12 shrink-0">
           {match.bracket_slot || roundLabel(match)}
         </span>

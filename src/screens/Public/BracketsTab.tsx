@@ -435,8 +435,8 @@ function BracketCell({ match, playerMap, teamMap, onClick }: BracketCellProps) {
   const p2Scores = sets.map((s) => s.p2);
 
   const baseClass = isLive
-    ? 'relative bg-navy-light border border-gold/40 pl-4'
-    : 'bg-navy-light/60 border border-navy-light px-3';
+    ? 'relative bg-navy-light border border-gold/40 pl-4 shadow-glass-live'
+    : 'bg-navy-light/70 border border-white/[0.07] px-3 shadow-glass';
 
   return (
     <button

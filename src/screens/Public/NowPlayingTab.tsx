@@ -17,6 +17,7 @@ interface NowPlayingTabProps {
 
 const PHASE_ORDER: Record<MatchRound, number> = {
   R1: 1,
+  RR: 1,
   BLP: 2,
   ConRR: 3,
   QF: 4,
