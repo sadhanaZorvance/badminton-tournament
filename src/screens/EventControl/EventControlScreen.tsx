@@ -29,10 +29,11 @@ interface EventControlScreenProps {
   loginPath: string;
 }
 
-const ROUND_ORDER: MatchRound[] = ['R1', 'QF', 'SF', 'F', '3P', 'BLP', 'ConRR', 'ConF'];
+const ROUND_ORDER: MatchRound[] = ['R1', 'RR', 'QF', 'SF', 'F', '3P', 'BLP', 'ConRR', 'ConF'];
 
 const ROUND_LABEL: Record<MatchRound, string> = {
   R1: 'Round 1',
+  RR: 'Round Robin',
   QF: 'Quarter Finals',
   SF: 'Semi Finals',
   F: 'Final',

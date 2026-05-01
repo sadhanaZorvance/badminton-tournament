@@ -119,29 +119,36 @@ export default function MatchCard({
   if (variant === 'ready') {
     return (
       <Wrapper {...wrapperProps}>
-        <div className="rounded-lg bg-navy-light/70 border border-white/[0.07] px-4 py-3 hover:bg-navy-light transition-colors shadow-glass">
-          <div className="flex items-center justify-between mb-2 gap-2">
+        <div className="rounded-lg bg-navy-light/70 border border-white/[0.07] px-3 py-2 hover:bg-navy-light transition-colors shadow-glass">
+          <div className="flex items-center justify-between mb-1.5 gap-2">
             <div className="flex items-center gap-2 min-w-0">
-              <span className="text-xs font-body text-slate uppercase tracking-wider truncate">
+              <span className="text-[10px] font-body text-slate uppercase tracking-wider truncate">
                 {eventLabel ?? roundLabel(match)}
               </span>
               {inconsistent && (
                 <span
-                  className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-body font-semibold bg-amber-warning/20 text-amber-warning uppercase tracking-wider shrink-0"
-                  title="Flagged as inconsistent — review and cascade if needed"
+                  className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-body font-semibold bg-amber-warning/20 text-amber-warning uppercase tracking-wider shrink-0"
+                  title="Flagged as inconsistent"
                 >
-                  ⚠ Inconsistent
+                  ⚠
                 </span>
               )}
             </div>
             <FormatChip format={match.match_format} />
           </div>
-          <div className="font-body text-white text-base">
-            {p1}
-            {handicap && <span className="text-amber-warning ml-1">★</span>}
-            <span className="text-slate mx-2">vs</span>
-            {p2}
-            {handicap && <span className="text-amber-warning ml-1">★</span>}
+          <div className="flex items-center gap-2">
+            <div className="flex-1 min-w-0">
+              <p className="font-body text-white text-xs truncate leading-snug">
+                {p1}
+                {handicap && <span className="text-amber-warning ml-0.5 text-[10px]">★</span>}
+              </p>
+              <div className="h-px bg-white/[0.05] my-1" />
+              <p className="font-body text-white text-xs truncate leading-snug">
+                {p2}
+                {handicap && <span className="text-amber-warning ml-0.5 text-[10px]">★</span>}
+              </p>
+            </div>
+            <span className="font-body text-slate-light text-sm shrink-0 self-center">vs</span>
           </div>
         </div>
       </Wrapper>

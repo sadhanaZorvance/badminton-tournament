@@ -64,6 +64,7 @@ function eventLabel(ev: Event | null, match: Match | null): string {
   const round = match.round;
   const roundLabel: Record<typeof round, string> = {
     R1: 'Round 1',
+    RR: 'Round Robin',
     QF: 'Quarter Final',
     SF: 'Semi Final',
     F: 'Final',
