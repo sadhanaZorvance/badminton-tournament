@@ -330,26 +330,28 @@ begin
     return false;
   end if;
 
-  -- All RR matches must be terminal
+  -- All non-playoff matches must be terminal (exclude bracket_slot to avoid filtering on round value
+  -- which may be 'RR' or 'ConRR' depending on which version of lock_e8_draw was run)
   select count(*) into v_outstanding
     from public.matches
    where event_id = p_event_id
-     and round = 'RR'
+     and bracket_slot not in ('F','3P','ConF')
      and status not in ('complete','walkover','retired');
 
   if v_outstanding > 0 then return false; end if;
 
-  -- Compute standings from completed RR matches
+  -- Compute standings from completed pool matches (bracket_slot-based filter handles both
+  -- round='RR' and round='ConRR' from older lock_e8_draw versions)
   v_rr_rank := 0;
   for v_standings_row in
     with entrants as (
       select distinct p1_id as entrant_id, p1_type as entrant_type
         from public.matches
-       where event_id = p_event_id and round = 'RR' and p1_id is not null
+       where event_id = p_event_id and bracket_slot not in ('F','3P','ConF') and p1_id is not null
       union
       select distinct p2_id, p2_type
         from public.matches
-       where event_id = p_event_id and round = 'RR' and p2_id is not null
+       where event_id = p_event_id and bracket_slot not in ('F','3P','ConF') and p2_id is not null
     ),
     match_scores as (
       select
@@ -358,7 +360,7 @@ begin
         coalesce((select sum((el->>'p2')::int) from jsonb_array_elements(m.score_sets) el), 0) as p2_pf
       from public.matches m
      where m.event_id = p_event_id
-       and m.round = 'RR'
+       and m.bracket_slot not in ('F','3P','ConF')
        and m.status in ('complete','walkover','retired')
     ),
     standings_agg as (
