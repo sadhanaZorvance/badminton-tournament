@@ -98,11 +98,7 @@ export default function E8DrawPanel({ eventId, drawLocked, onOpenForm }: E8DrawP
           </button>
         </div>
       ) : (
-        <div className="space-y-3">
-          <p className="font-body text-sm text-slate-light">
-            Assign 5 pairs (3× U15+U11 and 2× U15+U13) and lock the draw to generate
-            10 round-robin matches.
-          </p>
+        <div>
           <button
             type="button"
             onClick={onOpenForm}
