@@ -3,6 +3,7 @@ import LoginScreen from './screens/Login/LoginScreen';
 import MatchPickerScreen from './screens/MatchPicker/MatchPickerScreen';
 import ScoreEntryScreen from './screens/ScoreEntry/ScoreEntryScreen';
 import EventControlScreen from './screens/EventControl/EventControlScreen';
+import ChampionBoardAdminScreen from './screens/ChampionBoardAdmin/ChampionBoardAdminScreen';
 import ProtectedRoute from './components/ProtectedRoute';
 import AdminHeader from './components/AdminHeader';
 import { getCourtAdminSlug, getTopAdminSlug } from './lib/auth';
@@ -137,7 +138,7 @@ export default function App() {
           path={`${topBase}/champion-board`}
           element={
             <ProtectedRoute role="top_admin" loginPath={topBase}>
-              <AdminPlaceholder basePath={topBase} loginPath={topBase} title="Champion Board" />
+              <ChampionBoardAdminScreen basePath={topBase} loginPath={topBase} />
             </ProtectedRoute>
           }
         />
