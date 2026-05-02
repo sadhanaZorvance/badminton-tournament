@@ -1787,6 +1787,26 @@ begin
          status = 'pending'::match_status_t
    where round in ('QF','SF','F','3P');
 
+  -- Restore BYE matches: they are auto-complete by definition — the top seed always wins.
+  -- The general reset above cleared winner_id/status, so restore them explicitly.
+  update public.matches set
+    status       = 'complete'::match_status_t,
+    winner_id    = p1_id,
+    winner_type  = p1_type,
+    completed_at = now()
+  where bracket_slot = 'BYE' and p1_id is not null;
+
+  -- Re-seed SF1.p1 = BYE winner (7-player hybrid bracket: top seed always goes into SF1.p1).
+  -- The QF/SF/F/3P reset above cleared these; restore from the BYE match.
+  update public.matches sf
+     set p1_id   = bye.p1_id,
+         p1_type = bye.p1_type
+    from public.matches bye
+   where bye.bracket_slot = 'BYE'
+     and bye.p1_id is not null
+     and sf.bracket_slot  = 'SF1'
+     and sf.event_id      = bye.event_id;
+
   -- Reset event status: E1 active (always first), E8 pending until draw locked, others pending.
   update public.events set status = 'pending', draw_locked = false;
   update public.events set status = 'active' where code = 'E1';
