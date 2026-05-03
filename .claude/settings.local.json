@@ -4,7 +4,15 @@
       "mcp__Claude_in_Chrome__tabs_context_mcp",
       "Bash(npx tsc *)",
       "Bash(sed -n '332,338p' C:/Zorvance/workspace-personal/badminton-tournament/scripts/seed-teams.js)",
-      "Bash(sed -n '171,178p' C:/Zorvance/workspace-personal/badminton-tournament/scripts/seed-matches.js)"
+      "Bash(sed -n '171,178p' C:/Zorvance/workspace-personal/badminton-tournament/scripts/seed-matches.js)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)",
+      "Bash(git commit *)",
+      "Bash(xargs ls *)",
+      "Bash(npx supabase *)",
+      "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(json.dumps\\(d.get\\('scripts',{}\\), indent=2\\)\\)\")",
+      "Bash(npm run *)"
     ]
   }
 }
